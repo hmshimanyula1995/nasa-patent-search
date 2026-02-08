@@ -3,14 +3,14 @@ import zipfile
 import streamlit as st
 import streamlit.components.v1 as components
 
-from utils.styles import inject_custom_css
+from utils.styles import inject_custom_css, NASA_LOGO_URL
 from utils.bigquery_client import search_patents
 from utils.gemini_client import generate_summary, build_results_text
 from utils.charts import create_assignee_chart, create_inventor_chart, create_cpc_chart
 from utils.graph import build_network_html
 
 st.set_page_config(
-    page_title="NASA Patent Search",
+    page_title="NASA Patent Similarity Search",
     page_icon="https://www.nasa.gov/favicon.ico",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -22,14 +22,14 @@ inject_custom_css()
 
 with st.sidebar:
     st.markdown(
-        """
-        <div style="text-align:center; padding: 12px 0 24px;">
-            <div style="font-size: 32px; margin-bottom: 8px;">🛰️</div>
-            <h2 style="margin:0; font-size:20px; font-weight:700; color:#FAFAFA;">
-                NASA TTO
+        f"""
+        <div style="text-align:center; padding: 16px 0 24px;">
+            <img src="{NASA_LOGO_URL}" style="width:72px; margin-bottom:12px;" />
+            <h2 style="margin:0; font-size:18px; font-weight:700; color:#0B3D91;">
+                Technology Transfer Office
             </h2>
-            <p style="margin:4px 0 0; font-size:12px; color:#71717A; letter-spacing:1px;">
-                PATENT SIMILARITY SEARCH
+            <p style="margin:6px 0 0; font-size:11px; color:#5B616B; letter-spacing:1.5px; text-transform:uppercase;">
+                Patent Similarity Search
             </p>
         </div>
         """,
@@ -66,15 +66,13 @@ with st.sidebar:
     st.markdown(
         """
         <div style="padding:8px 0;">
-            <p style="font-size:11px; color:#52525B; margin:0;">
-                <b>Graph legend</b>
+            <p style="font-size:11px; color:#5B616B; font-weight:600; margin:0 0 6px;">
+                Graph Legend
             </p>
-            <p style="font-size:11px; color:#52525B; margin:4px 0 0;">
-                <span style="color:#00D4FF;">&#9679;</span> Similar &nbsp;
-                <span style="color:#3B82F6;">&#9679;</span> Cites &nbsp;
-                <span style="color:#F59E0B;">&#9679;</span> Parent &nbsp;
-                <span style="color:#EF4444;">&#9679;</span> Child
-            </p>
+            <span class="legend-item"><span class="legend-dot" style="background:#105BD8;"></span> Similar</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#4773AA;"></span> Cites</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#FF9D1E;"></span> Parent</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#DD361C;"></span> Child</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -84,9 +82,9 @@ with st.sidebar:
 
 if "patent_number" not in st.session_state:
     st.markdown(
-        """
+        f"""
         <div class="empty-state">
-            <div class="empty-state-icon">🔭</div>
+            <img src="{NASA_LOGO_URL}" class="empty-state-icon" />
             <h2>Search NASA's Patent Database</h2>
             <p>
                 Enter a patent number in the sidebar to find semantically similar
@@ -98,10 +96,25 @@ if "patent_number" not in st.session_state:
     )
     st.stop()
 
-# ── Run search ───────────────────────────────────────────────────────────
+# ── Header banner ────────────────────────────────────────────────────────
 
 pn = st.session_state["patent_number"]
 tk = st.session_state["top_k"]
+
+st.markdown(
+    f"""
+    <div class="header-banner">
+        <img src="{NASA_LOGO_URL}" />
+        <div>
+            <h1>Patent Similarity Search</h1>
+            <p>Searching for {pn} &middot; Top {tk} results</p>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ── Run search ───────────────────────────────────────────────────────────
 
 with st.status("Analyzing patents...", expanded=True) as status:
     st.write("Searching patent database...")
@@ -238,11 +251,6 @@ display_df = search_results[
 ].copy()
 display_df.insert(0, "rank", range(1, len(display_df) + 1))
 
-google_patents_base = "https://patents.google.com/patent/"
-display_df["link"] = display_df["publication_number"].apply(
-    lambda x: f"{google_patents_base}{x.replace('-', '')}"
-)
-
 st.dataframe(
     display_df,
     column_config={
@@ -258,7 +266,6 @@ st.dataframe(
         "primary_assignee": st.column_config.TextColumn("Assignee"),
         "primary_inventor": st.column_config.TextColumn("Inventor"),
         "filed": st.column_config.TextColumn("Filed"),
-        "link": st.column_config.LinkColumn("View", display_text="Open"),
     },
     use_container_width=True,
     hide_index=True,
@@ -298,7 +305,7 @@ components.html(graph_html, height=580, scrolling=False)
 
 st.markdown("---")
 
-csv_data = display_df.drop(columns=["link"]).to_csv(index=False)
+csv_data = display_df.to_csv(index=False)
 
 buf = io.BytesIO()
 with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
