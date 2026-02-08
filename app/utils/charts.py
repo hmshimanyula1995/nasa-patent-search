@@ -4,27 +4,27 @@ import plotly.graph_objects as go
 
 
 COLORS = [
-    "#00D4FF", "#7C3AED", "#10B981", "#F59E0B", "#EF4444",
-    "#EC4899", "#8B5CF6", "#06B6D4", "#84CC16", "#F97316",
+    "#0B3D91", "#2E8540", "#105BD8", "#FF9D1E", "#DD361C",
+    "#046B99", "#4AA564", "#02BFE7", "#4773AA", "#94BFA2",
 ]
 
-GRID = "rgba(255,255,255,0.04)"
-ZEROLINE = "rgba(255,255,255,0.06)"
+GRID = "rgba(11, 61, 145, 0.06)"
+ZEROLINE = "rgba(11, 61, 145, 0.1)"
 
-DARK_LAYOUT = dict(
+BASE_LAYOUT = dict(
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
-    font=dict(color="#E4E4E7", family="Inter, system-ui, sans-serif", size=12),
+    font=dict(color="#323A45", family="Public Sans, Inter, system-ui, sans-serif", size=12),
     margin=dict(l=10, r=10, t=40, b=10),
     hoverlabel=dict(
-        bgcolor="#1E1E2E",
+        bgcolor="#FFFFFF",
         font_size=12,
-        font_family="Inter",
-        bordercolor="rgba(255,255,255,0.1)",
+        font_family="Public Sans",
+        bordercolor="#DCE4EF",
     ),
     legend=dict(
         bgcolor="rgba(0,0,0,0)",
-        font=dict(size=11),
+        font=dict(size=11, color="#5B616B"),
     ),
 )
 
@@ -79,7 +79,7 @@ def create_assignee_chart(results_df: pd.DataFrame, top_n: int = 10) -> go.Figur
         orientation="h",
         marker=dict(
             color=list(values),
-            colorscale=[[0, "#0066FF"], [1, "#00D4FF"]],
+            colorscale=[[0, "#0B3D91"], [1, "#105BD8"]],
             line=dict(width=0),
             cornerradius=4,
         ),
@@ -87,8 +87,8 @@ def create_assignee_chart(results_df: pd.DataFrame, top_n: int = 10) -> go.Figur
     ))
 
     fig.update_layout(
-        **DARK_LAYOUT,
-        title=dict(text="Top Assignees", font=dict(size=14, color="#FAFAFA")),
+        **BASE_LAYOUT,
+        title=dict(text="Top Assignees", font=dict(size=14, color="#0B3D91")),
         height=350,
         yaxis=dict(gridcolor=GRID, zerolinecolor=ZEROLINE, tickfont=dict(size=11)),
         xaxis=dict(gridcolor=GRID, zerolinecolor=ZEROLINE, title="Patent Count"),
@@ -111,7 +111,7 @@ def create_inventor_chart(results_df: pd.DataFrame, top_n: int = 10) -> go.Figur
         orientation="h",
         marker=dict(
             color=list(values),
-            colorscale=[[0, "#7C3AED"], [1, "#C084FC"]],
+            colorscale=[[0, "#2E8540"], [1, "#4AA564"]],
             line=dict(width=0),
             cornerradius=4,
         ),
@@ -119,8 +119,8 @@ def create_inventor_chart(results_df: pd.DataFrame, top_n: int = 10) -> go.Figur
     ))
 
     fig.update_layout(
-        **DARK_LAYOUT,
-        title=dict(text="Top Inventors", font=dict(size=14, color="#FAFAFA")),
+        **BASE_LAYOUT,
+        title=dict(text="Top Inventors", font=dict(size=14, color="#0B3D91")),
         height=350,
         yaxis=dict(gridcolor=GRID, zerolinecolor=ZEROLINE, tickfont=dict(size=11)),
         xaxis=dict(gridcolor=GRID, zerolinecolor=ZEROLINE, title="Patent Count"),
@@ -155,8 +155,8 @@ def create_cpc_chart(results_df: pd.DataFrame) -> go.Figure:
     ))
 
     fig.update_layout(
-        **DARK_LAYOUT,
-        title=dict(text="Technology Distribution (CPC)", font=dict(size=14, color="#FAFAFA")),
+        **BASE_LAYOUT,
+        title=dict(text="Technology Distribution (CPC)", font=dict(size=14, color="#0B3D91")),
         height=350,
         xaxis=dict(gridcolor=GRID, zerolinecolor=ZEROLINE, tickangle=-30, tickfont=dict(size=10)),
         yaxis=dict(gridcolor=GRID, zerolinecolor=ZEROLINE, title="Count"),
@@ -167,14 +167,14 @@ def create_cpc_chart(results_df: pd.DataFrame) -> go.Figure:
 def _empty_chart(message: str) -> go.Figure:
     fig = go.Figure()
     fig.update_layout(
-        **DARK_LAYOUT,
+        **BASE_LAYOUT,
         height=350,
         annotations=[dict(
             text=message,
             xref="paper", yref="paper",
             x=0.5, y=0.5,
             showarrow=False,
-            font=dict(size=14, color="#71717A"),
+            font=dict(size=14, color="#AEB0B5"),
         )],
     )
     return fig

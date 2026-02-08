@@ -5,11 +5,11 @@ from pyvis.network import Network
 
 
 EDGE_COLORS = {
-    "similar": "#00D4FF",
-    "cites": "#3B82F6",
-    "cited_by": "#60A5FA",
-    "parent": "#F59E0B",
-    "child": "#EF4444",
+    "similar": "#105BD8",
+    "cites": "#4773AA",
+    "cited_by": "#8BA6CA",
+    "parent": "#FF9D1E",
+    "child": "#DD361C",
 }
 
 PHYSICS_OPTIONS = """{
@@ -49,20 +49,20 @@ def _to_list(val) -> list:
 
 def _similarity_color(similarity: float) -> str:
     if similarity >= 0.8:
-        return "#10B981"
+        return "#2E8540"
     if similarity >= 0.6:
-        return "#84CC16"
+        return "#4AA564"
     if similarity >= 0.4:
-        return "#F59E0B"
-    return "#71717A"
+        return "#FF9D1E"
+    return "#AEB0B5"
 
 
 def build_network_html(results_df: pd.DataFrame, query_patent: str) -> str:
     net = Network(
         height="550px",
         width="100%",
-        bgcolor="#0E1117",
-        font_color="#E4E4E7",
+        bgcolor="#F6F8FC",
+        font_color="#323A45",
         directed=True,
         select_menu=False,
         filter_menu=False,
@@ -80,9 +80,9 @@ def build_network_html(results_df: pd.DataFrame, query_patent: str) -> str:
         query_patent,
         label=query_patent,
         title=f"QUERY: {query_patent}\n{query_title}",
-        color={"background": "#00D4FF", "border": "#0066FF"},
+        color={"background": "#0B3D91", "border": "#061F4A"},
         size=45,
-        font={"size": 12, "color": "#FAFAFA"},
+        font={"size": 12, "color": "#212121"},
         shape="dot",
         borderWidth=3,
     )
@@ -102,9 +102,9 @@ def build_network_html(results_df: pd.DataFrame, query_patent: str) -> str:
             pub,
             label=pub,
             title=f"{pub}\n{title}\nAssignee: {assignee}\nSimilarity: {similarity:.1%}",
-            color={"background": node_color, "border": "rgba(255,255,255,0.15)"},
+            color={"background": node_color, "border": "#DCE4EF"},
             size=node_size,
-            font={"size": 10, "color": "#A1A1AA"},
+            font={"size": 10, "color": "#5B616B"},
             shape="dot",
             borderWidth=1,
         )
