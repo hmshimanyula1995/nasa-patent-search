@@ -1,5 +1,11 @@
+import logging
 import os
+import time
+
 import streamlit as st
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 GCP_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "grad-589-588")
 VERTEX_LOCATION = os.getenv("VERTEX_AI_LOCATION", "us-central1")
@@ -99,10 +105,19 @@ def generate_summary(
         results_json=results_json,
     )
 
+    logger.info(
+        "Gemini request: model=%s, prompt_length=%d chars",
+        GEMINI_MODEL, len(prompt),
+    )
+
     try:
+        t0 = time.time()
         response = model.generate_content(prompt)
+        elapsed = time.time() - t0
+        logger.info("Gemini response: %d chars in %.2fs", len(response.text), elapsed)
         return response.text
     except Exception as e:
+        logger.error("Gemini generation failed: %s", e)
         return f"Summary generation failed: {e}"
 
 

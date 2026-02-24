@@ -1,8 +1,14 @@
+import logging
 import os
-import streamlit as st
+import re
+import time
+
 import pandas as pd
+import streamlit as st
 from google.cloud import bigquery
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "grad-589-588")
 DATASET = os.getenv("BIGQUERY_DATASET", "patent_research")
@@ -78,8 +84,106 @@ def _get_client() -> bigquery.Client:
     return bigquery.Client(project=PROJECT)
 
 
+_PUB_NUMBER_RE = re.compile(r"^[A-Z]{2}-\d+-[A-Z]\d$")
+
+NORMALIZE_QUERY = f"""
+SELECT publication_number
+FROM {FULL_TABLE}
+WHERE publication_number IN (
+    CONCAT('US-', @number, '-B1'),
+    CONCAT('US-', @number, '-B2'),
+    CONCAT('US-', @number, '-A1')
+)
+LIMIT 1
+"""
+
+NORMALIZE_LIKE_QUERY = f"""
+SELECT publication_number
+FROM {FULL_TABLE}
+WHERE publication_number LIKE CONCAT('US-', @number, '%')
+LIMIT 1
+"""
+
+NORMALIZE_APP_QUERY = f"""
+SELECT publication_number
+FROM {FULL_TABLE}
+WHERE application_number = @number
+LIMIT 1
+"""
+
+
+def normalize_patent_number(raw_input: str) -> str | None:
+    """Convert user input to the publication_number format used in BigQuery.
+
+    Accepts:
+      - Full format: US-8410469-B2 (returned as-is)
+      - Plain grant number: 8410469 or 8,410,469
+      - Prefixed: US8410469
+
+    Returns the matched publication_number or None if not found.
+    """
+    cleaned = raw_input.strip().replace(",", "").replace(" ", "")
+    if not cleaned:
+        return None
+
+    # Already in publication_number format (e.g., US-8410469-B2)
+    if _PUB_NUMBER_RE.match(cleaned):
+        logger.info("Input '%s' already in publication_number format", cleaned)
+        return cleaned
+
+    # Strip leading "US" prefix if present (e.g., US8410469 -> 8410469)
+    number = re.sub(r"^US", "", cleaned, flags=re.IGNORECASE)
+
+    # Must be numeric at this point
+    if not number.isdigit():
+        logger.warning("Input '%s' is not a valid patent number after cleaning", raw_input)
+        return None
+
+    logger.info("Normalizing plain number '%s' — looking up in BigQuery", number)
+    client = _get_client()
+
+    # Step 1: Try exact match with common suffixes (B1, B2, A1)
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("number", "STRING", number),
+        ]
+    )
+    t0 = time.time()
+    rows = list(client.query(NORMALIZE_QUERY, job_config=job_config).result())
+    elapsed = time.time() - t0
+
+    if rows:
+        pub = rows[0]["publication_number"]
+        logger.info("Resolved '%s' -> '%s' via exact suffix match (%.2fs)", number, pub, elapsed)
+        return pub
+
+    # Step 2: Try LIKE pattern (catches unusual suffixes)
+    t0 = time.time()
+    rows = list(client.query(NORMALIZE_LIKE_QUERY, job_config=job_config).result())
+    elapsed = time.time() - t0
+
+    if rows:
+        pub = rows[0]["publication_number"]
+        logger.info("Resolved '%s' -> '%s' via LIKE match (%.2fs)", number, pub, elapsed)
+        return pub
+
+    # Step 3: Try application_number lookup
+    t0 = time.time()
+    rows = list(client.query(NORMALIZE_APP_QUERY, job_config=job_config).result())
+    elapsed = time.time() - t0
+
+    if rows:
+        pub = rows[0]["publication_number"]
+        logger.info("Resolved '%s' -> '%s' via application_number (%.2fs)", number, pub, elapsed)
+        return pub
+
+    logger.warning("Could not resolve '%s' to any publication_number", number)
+    return None
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def search_patents(patent_number: str, top_k: int = 20) -> pd.DataFrame:
+    logger.info("search_patents called: patent_number='%s', top_k=%d", patent_number, top_k)
     client = _get_client()
 
     job_config = bigquery.QueryJobConfig(
@@ -89,9 +193,13 @@ def search_patents(patent_number: str, top_k: int = 20) -> pd.DataFrame:
         ]
     )
 
+    t0 = time.time()
     df = client.query(VECTOR_SEARCH_QUERY, job_config=job_config).to_dataframe()
+    elapsed = time.time() - t0
+    logger.info("Vector search completed: %d rows in %.2fs", len(df), elapsed)
 
     if df.empty:
+        logger.warning("No results for patent_number='%s'", patent_number)
         return df
 
     df["title_text"] = df["title"].apply(extract_struct_value)
@@ -154,6 +262,7 @@ def fetch_citation_neighbors(neighbor_ids: tuple[str, ...]) -> pd.DataFrame:
     if not neighbor_ids:
         return pd.DataFrame()
 
+    logger.info("Fetching %d citation neighbors", len(neighbor_ids))
     client = _get_client()
 
     job_config = bigquery.QueryJobConfig(
@@ -163,8 +272,12 @@ def fetch_citation_neighbors(neighbor_ids: tuple[str, ...]) -> pd.DataFrame:
     )
 
     try:
+        t0 = time.time()
         df = client.query(CITATION_EXPANSION_QUERY, job_config=job_config).to_dataframe()
-    except Exception:
+        elapsed = time.time() - t0
+        logger.info("Citation neighbor fetch: %d rows in %.2fs", len(df), elapsed)
+    except Exception as exc:
+        logger.error("Citation neighbor fetch failed: %s", exc)
         return pd.DataFrame()
 
     if df.empty:
