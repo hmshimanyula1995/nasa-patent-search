@@ -1,11 +1,15 @@
 import io
+import logging
+import time
 import zipfile
+
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
 from utils.styles import inject_custom_css, NASA_LOGO_URL
 from utils.bigquery_client import (
+    normalize_patent_number,
     search_patents,
     extract_citation_neighbors,
     fetch_citation_neighbors,
@@ -25,6 +29,9 @@ from utils.graph_ranking import (
     blend_scores,
     get_citation_edges,
 )
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 st.set_page_config(
     page_title="NASA Patent Similarity Search",
@@ -58,8 +65,8 @@ with st.sidebar:
     with st.form("search_form"):
         patent_number = st.text_input(
             "Patent Number",
-            placeholder="e.g. US-2007156035-A1",
-            help="Enter a US patent publication number from the indexed database.",
+            placeholder="e.g. US-2007156035-A1 or 8410469",
+            help="Enter a US patent publication number (US-XXXXXXX-A1) or grant number (8410469). Commas are stripped automatically.",
         )
         top_k = st.slider(
             "Number of Results",
@@ -155,12 +162,38 @@ st.markdown(
 # ── Run search ───────────────────────────────────────────────────────────
 
 with st.status("Analyzing patents...", expanded=True) as status:
+    # ── Normalize patent number ──
+    st.write("Resolving patent number...")
+    logger.info("Search initiated: input='%s', top_k=%d", pn, tk)
+    t_start = time.time()
+
+    normalized = normalize_patent_number(pn)
+    if normalized is None:
+        status.update(label="Patent not found", state="error")
+        st.error(
+            f"Patent number `{pn}` not found in the indexed database. "
+            "Try the full publication format (e.g. `US-8410469-B2`) or check "
+            "the number for typos."
+        )
+        logger.warning("Normalization failed for input='%s'", pn)
+        st.stop()
+
+    if normalized != pn:
+        st.write(f"Resolved `{pn}` → `{normalized}`")
+        logger.info("Normalized '%s' -> '%s'", pn, normalized)
+
+    pn = normalized
+
     st.write("Searching patent database...")
     results_df = search_patents(pn, tk)
 
     if results_df.empty:
         status.update(label="No results found", state="error")
-        st.error(f"Patent `{pn}` not found in the indexed database.")
+        st.error(
+            f"Patent `{pn}` was found but returned no similarity results. "
+            "It may not yet be indexed for similarity search."
+        )
+        logger.warning("Vector search returned 0 results for '%s'", pn)
         st.stop()
 
     query_patent = results_df.iloc[0]
@@ -195,8 +228,9 @@ with st.status("Analyzing patents...", expanded=True) as status:
                     lambda pub: normalized.get(pub, 0.0)
                 )
                 expanded_df["ppr_pct"] = (expanded_df["ppr_score"] * 100).clip(0, 100)
-    except Exception:
+    except Exception as exc:
         # Graceful degradation: PPR failed, continue with cosine-only
+        logger.error("PPR pipeline failed, falling back to cosine-only: %s", exc)
         ppr_available = False
         expanded_df = None
 
@@ -255,6 +289,11 @@ with st.status("Analyzing patents...", expanded=True) as status:
     fig_inventors = create_inventor_chart(search_results)
     fig_cpc = create_cpc_chart(search_results)
 
+    t_total = time.time() - t_start
+    logger.info(
+        "Analysis complete: %d results, ppr=%s, total=%.2fs",
+        len(search_results), ppr_available, t_total,
+    )
     status.update(label="Analysis complete", state="complete", expanded=False)
 
 # ── Metrics row ──────────────────────────────────────────────────────────

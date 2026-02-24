@@ -5,8 +5,13 @@ computes Personalized PageRank seeded from the query patent, and blends
 PPR scores with cosine similarity for a combined ranking signal.
 """
 
+import logging
+
 import networkx as nx
 import pandas as pd
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def _extract_pub_numbers(array_field: list | None) -> list[str]:
@@ -78,6 +83,10 @@ def build_citation_graph(
             if child in node_set and child != pub:
                 G.add_edge(pub, child, edge_type="child")
 
+    logger.info(
+        "Citation graph built: %d nodes, %d edges",
+        G.number_of_nodes(), G.number_of_edges(),
+    )
     return G
 
 
@@ -97,6 +106,7 @@ def compute_ppr(
         Dict mapping patent -> raw PPR score. Empty if graph has no edges.
     """
     if G.number_of_edges() == 0:
+        logger.info("PPR skipped: graph has no edges")
         return {}
 
     if query_patent not in G:
@@ -113,8 +123,15 @@ def compute_ppr(
             max_iter=100,
             tol=1e-06,
         )
+        top_3 = sorted(scores.items(), key=lambda x: -x[1])[:3]
+        logger.info(
+            "PPR computed: %d scores, top 3: %s",
+            len(scores),
+            [(pub, f"{s:.6f}") for pub, s in top_3],
+        )
         return scores
     except nx.PowerIterationFailedConvergence:
+        logger.warning("PPR failed to converge after 100 iterations")
         return {}
 
 
