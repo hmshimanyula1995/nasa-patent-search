@@ -44,6 +44,17 @@ FROM VECTOR_SEARCH(
 ORDER BY distance
 """
 
+CITATION_EXPANSION_QUERY = f"""
+SELECT
+    publication_number, title, abstract,
+    primary_assignee, primary_inventor,
+    assignee_harmonized, inventor_harmonized,
+    citation, cited_by, parent, child,
+    cpc, filing_date, publication_date, grant_date, top_terms
+FROM {FULL_TABLE}
+WHERE publication_number IN UNNEST(@neighbor_ids)
+"""
+
 
 def format_date(date_int) -> str:
     if not date_int or pd.isna(date_int):
@@ -92,5 +103,77 @@ def search_patents(patent_number: str, top_k: int = 20) -> pd.DataFrame:
 
     df["similarity"] = 1 - df["distance"]
     df["similarity_pct"] = (df["similarity"] * 100).clip(0, 100)
+
+    return df
+
+
+def extract_citation_neighbors(
+    results_df: pd.DataFrame,
+    max_neighbors: int = 500,
+) -> list[str]:
+    """Extract unique patent IDs from citation arrays not already in results.
+
+    Iterates citation/cited_by/parent/child arrays from all result rows,
+    collects unique publication_numbers not in the results set, and caps
+    at max_neighbors to avoid oversized queries.
+    """
+    existing = set(results_df["publication_number"].tolist())
+    neighbors: set[str] = set()
+
+    for _, row in results_df.iterrows():
+        for col in ("citation", "cited_by", "parent", "child"):
+            raw = row.get(col)
+            if raw is None:
+                continue
+            items = raw if isinstance(raw, list) else []
+            for item in items:
+                pub = ""
+                if isinstance(item, dict):
+                    pub = item.get("publication_number", "")
+                elif isinstance(item, str):
+                    pub = item
+                if pub and pub not in existing:
+                    neighbors.add(pub)
+                    if len(neighbors) >= max_neighbors:
+                        return list(neighbors)
+
+    return list(neighbors)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_citation_neighbors(neighbor_ids: tuple[str, ...]) -> pd.DataFrame:
+    """Fetch patent metadata for citation-expanded neighbors from BigQuery.
+
+    Args:
+        neighbor_ids: Tuple of publication_number strings (tuple for hashability).
+
+    Returns:
+        DataFrame with patent metadata. No similarity/distance columns.
+        Empty DataFrame on failure.
+    """
+    if not neighbor_ids:
+        return pd.DataFrame()
+
+    client = _get_client()
+
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ArrayQueryParameter("neighbor_ids", "STRING", list(neighbor_ids)),
+        ]
+    )
+
+    try:
+        df = client.query(CITATION_EXPANSION_QUERY, job_config=job_config).to_dataframe()
+    except Exception:
+        return pd.DataFrame()
+
+    if df.empty:
+        return df
+
+    df["title_text"] = df["title"].apply(extract_struct_value)
+    df["abstract_text"] = df["abstract"].apply(extract_struct_value)
+    df["filed"] = df["filing_date"].apply(format_date)
+    df["published"] = df["publication_date"].apply(format_date)
+    df["granted"] = df["grant_date"].apply(format_date)
 
     return df

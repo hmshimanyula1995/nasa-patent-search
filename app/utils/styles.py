@@ -410,6 +410,26 @@ def inject_custom_css():
         display: inline-block;
     }
 
+    .legend-triangle {
+        width: 0;
+        height: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-bottom: 10px solid #5B616B;
+        display: inline-block;
+    }
+
+    .legend-section-label {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: #323A45;
+        margin-top: 8px;
+        margin-bottom: 2px;
+        display: block;
+    }
+
     /* ── Footer ── */
     .footer {
         text-align: center;
