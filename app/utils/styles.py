@@ -482,5 +482,84 @@ def inject_custom_css():
             font-size: 18px;
         }
     }
+
+    /* ── Print styles ── */
+    @media print {
+        @page {
+            size: landscape;
+            margin: 0.5in;
+        }
+
+        /* Hide sidebar, search form, download button, interactive graph */
+        [data-testid="stSidebar"],
+        [data-testid="stStatusWidget"],
+        .stFormSubmitButton,
+        .stDownloadButton,
+        .stSlider,
+        iframe { display: none !important; }
+
+        /* Full width - remove max-width constraint */
+        .main .block-container {
+            max-width: 100% !important;
+            padding: 0 !important;
+        }
+
+        /* Remove overflow clipping */
+        [data-testid="stDataFrame"],
+        [data-testid="stExpander"] {
+            overflow: visible !important;
+        }
+
+        /* Force columns to stack vertically */
+        [data-testid="stHorizontalBlock"] {
+            flex-direction: column !important;
+        }
+        [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+            width: 100% !important;
+            flex: none !important;
+        }
+
+        /* Remove decorative effects */
+        .patent-card,
+        [data-testid="stMetric"],
+        [data-testid="stExpander"] {
+            box-shadow: none !important;
+            border-radius: 0 !important;
+        }
+
+        /* Expand expanders so content is visible */
+        [data-testid="stExpander"] details {
+            open: true;
+        }
+        [data-testid="stExpander"] details[open] summary ~ * {
+            display: block !important;
+        }
+
+        /* Clean header banner for print */
+        .header-banner {
+            background: #0B3D91 !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        /* Ensure background colors print */
+        .patent-badge, .tag, .ai-summary, .patent-meta {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        /* Page break control */
+        .patent-card, .section-header {
+            break-inside: avoid;
+        }
+        .section-header {
+            break-after: avoid;
+        }
+
+        /* Hide footer */
+        .footer { display: none !important; }
+    }
     </style>
     """, unsafe_allow_html=True)
