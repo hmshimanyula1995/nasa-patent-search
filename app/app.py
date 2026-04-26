@@ -321,8 +321,22 @@ with st.status("Analyzing patents...", expanded=True) as status:
         logger.warning("Vector search returned 0 results for '%s'", pn)
         st.stop()
 
-    query_patent = results_df.iloc[0]
-    search_results = results_df.iloc[1:].copy()
+    # Identify the query patent by publication number rather than row position.
+    # The vector search ORDER BY distance puts ties (identical embeddings) in
+    # undefined order, so the self-match is not guaranteed to be at row 0.
+    query_mask = results_df["publication_number"] == pn
+    if query_mask.any():
+        query_patent = results_df[query_mask].iloc[0]
+        search_results = results_df[~query_mask].copy()
+    else:
+        # Self-match missing entirely (rare). Fall back to row 0 so the page
+        # still renders, but log it because it indicates a data issue.
+        logger.warning(
+            "Query patent '%s' not found in its own vector search results; "
+            "falling back to row 0 as the query patent.", pn,
+        )
+        query_patent = results_df.iloc[0]
+        search_results = results_df.iloc[1:].copy()
 
     # ── Citation expansion + PPR pipeline ──
     ppr_available = False
