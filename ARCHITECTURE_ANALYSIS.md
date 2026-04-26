@@ -1,6 +1,8 @@
 # NASA Patent Matching Tool: Architecture Analysis
 
-> **Purpose:** A comprehensive technical comparison between the legacy system (Team E, Fall 2025) and the new serverless architecture. This document covers data pipelines, query flows, infrastructure, and key code references.
+> **Purpose:** A technical comparison between the legacy system (Team E, Fall 2025) and the current serverless architecture. This document covers data pipelines, query flows, infrastructure, and key code references.
+>
+> **Status note:** The legacy code described in section 2 (`project-mountainstar-final_code/` with `app_sesh_id.py`, `RAGModel-V3-Final.ipynb`, `startup.py`, etc.) was **removed from the repository** during the NASA handover cleanup. The legacy architecture is preserved in this document as the rationale for the new design. To inspect the old code, check git history before that cleanup commit.
 
 ---
 
@@ -19,7 +21,9 @@
    - [Data Pipeline](#32-data-pipeline)
    - [Query Execution Flow](#33-query-execution-flow)
    - [AI / RAG Layer](#34-ai--rag-layer)
-   - [Infrastructure Requirements](#35-infrastructure-requirements)
+   - [Patent Data Refresh](#35-patent-data-refresh)
+   - [Continuous Deployment](#36-continuous-deployment)
+   - [Infrastructure Requirements](#37-infrastructure-requirements)
 4. [Side-by-Side Comparison](#4-side-by-side-comparison)
 5. [Why the New Architecture is Better](#5-why-the-new-architecture-is-better)
 6. [What to Preserve From the Old System](#6-what-to-preserve-from-the-old-system)
@@ -349,7 +353,7 @@ graph TB
     end
 
     subgraph "Google Vertex AI"
-        GEMINI[Gemini 1.5 Pro / Flash<br/>Summarization + RAG]
+        GEMINI[Gemini 2.5 Flash<br/>Summarization + RAG]
     end
 
     subgraph "Automated Updates"
@@ -404,7 +408,7 @@ sequenceDiagram
 
     Note over Streamlit,BQ: STEP 1: Get the query patent's embedding (~1s)
     Streamlit->>BQ: SELECT embedding FROM us_patents_indexed<br/>WHERE publication_number = 'US-XXXXXXX-XX'
-    BQ-->>Streamlit: Pre-calculated 768-dim embedding vector
+    BQ-->>Streamlit: Pre-calculated 64-dim embedding vector
 
     Note over Streamlit,BQ: STEP 2: Vector search (~2-5s)
     Streamlit->>BQ: SELECT * FROM us_patents_indexed<br/>ORDER BY COSINE_DISTANCE(embedding, @query_vector)<br/>LIMIT @top_k
@@ -433,14 +437,28 @@ This is a **new capability** that the legacy system does not have.
 graph LR
     subgraph "RAG Pipeline"
         RESULTS[Top 5 Search Results<br/>title + abstract] --> PROMPT[Prompt Template<br/>Summarize as NASA<br/>innovation brief]
-        PROMPT --> GEMINI2[Gemini 1.5 Pro/Flash<br/>via Vertex AI]
+        PROMPT --> GEMINI2[Gemini 2.5 Flash<br/>via Vertex AI]
         GEMINI2 --> SUMMARY[AI-Generated Summary<br/>Plain-language comparison<br/>of related patents]
     end
 ```
 
 The legacy system only returned raw search results. The new system can generate a natural-language summary explaining how the results relate to the query patent.
 
-### 3.5 Infrastructure Requirements
+### 3.5 Patent Data Refresh
+
+The patent index is kept current by a single BigQuery `MERGE` (Scheduled Query) that upserts new US patents from the public Google Patents dataset and updates citation arrays on existing rows. There are three orthogonal triggers for this same MERGE:
+
+1. **Quarterly cron** (the BigQuery Scheduled Query's own schedule).
+2. **In-app sidebar button** (`app/utils/refresh.py` calls `start_manual_transfer_runs` on the BigQuery Data Transfer API). The button is subject to a server-side seven-day cooldown keyed off the most recent successful run.
+3. **GitHub Actions workflow** (`.github/workflows/refresh-data.yml`, `workflow_dispatch` only).
+
+This separation of concerns is deliberate. The application never holds the SQL itself; the Scheduled Query is the single source of truth, so anyone with access to the BigQuery console can also trigger a refresh independently of the application.
+
+### 3.6 Continuous Deployment
+
+Deployment to Cloud Run is performed by `.github/workflows/deploy.yml`. It authenticates to GCP via Workload Identity Federation (no service account JSON keys), reads project identifiers from GitHub Variables, and impersonates a deploy-only service account. This is the path NASA uses; the team's `grad-589-588` deploys are equivalent and can be done with `gcloud run deploy --source ./app` directly. Both paths produce the same container image.
+
+### 3.7 Infrastructure Requirements
 
 ```mermaid
 graph LR
@@ -524,7 +542,7 @@ graph TB
 | **End-to-end query time** | **Minutes** (notebook + CPU embed + parquet I/O) | **Seconds** (single SQL query) |
 | **Data updates** | Manual multi-step GPU pipeline | Automated quarterly BigQuery scheduled query |
 | **Infrastructure** | Always-on VM (16 vCPU, 104 GB RAM) | Serverless (Cloud Run, scales to zero) |
-| **AI summarization** | None | Gemini 1.5 Pro/Flash via Vertex AI |
+| **AI summarization** | None | Gemini 2.5 Flash via Vertex AI |
 | **Authentication** | None (network-level only) | TBD (should add for NASA) |
 | **Concurrency** | Max 2 jobs, custom queue system | Automatic (Cloud Run scaling) |
 | **Cost (low usage)** | ~$6,500-9,000/yr | ~$50-200/yr |
