@@ -187,7 +187,9 @@ with st.sidebar:
                     f"{refresh_status.last_run_error or ''}"
                 )
 
-        cooldown = cooldown_remaining(refresh_status.last_run_time)
+        # Cooldown is keyed off the last *successful* run, so a failed run
+        # does not block an admin from retrying immediately.
+        cooldown = cooldown_remaining(refresh_status.last_successful_run_time)
         if cooldown > 0:
             day_word = "day" if cooldown == 1 else "days"
             st.button(
