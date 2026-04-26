@@ -1,6 +1,8 @@
 # BigQuery Queries Reference
 
-> All queries used to build the NASA Patent Matching Tool data layer. Run these in order.
+> All queries used to build and validate the NASA Patent Matching Tool data layer. Run these in order.
+>
+> **Canonical deploy path:** the `MERGE` and table creation queries used during a NASA handover are also documented in [`MIGRATION.md`](MIGRATION.md), parameterized by `NASA_PROJECT_ID`. This file uses the literal `grad-589-588` project ID and is intended as the team-internal reference. If the two ever drift, MIGRATION.md is the source of truth.
 
 ---
 
@@ -465,12 +467,18 @@ USING (
 ) AS source
 ON target.publication_number = source.publication_number
 WHEN NOT MATCHED THEN
-    INSERT ROW;
+    INSERT ROW
+WHEN MATCHED THEN
+    UPDATE SET
+        target.cited_by = source.cited_by,
+        target.citation = source.citation,
+        target.parent = source.parent,
+        target.child = source.child;
 ```
 
-**What it does:** Only inserts patents that don't already exist in the table. Existing patents are untouched. This is the "incremental upsert" Dennis asked for ("just update the database with newly issued patents").
+**What it does:** Inserts patents that don't already exist in the table, and refreshes the citation/family arrays on existing patents (because forward citations grow over time as later patents reference earlier ones). This is the "incremental upsert" Dennis asked for ("just update the database with newly issued patents").
 
-**Scheduling:** Set this up as a BigQuery Scheduled Query to run quarterly (every 3 months). Dennis confirmed: "quarterly is fine."
+**Scheduling:** Set this up as a BigQuery Scheduled Query to run quarterly (every 3 months). Dennis confirmed: "quarterly is fine." The application's in-app refresh button and `.github/workflows/refresh-data.yml` both trigger this same Scheduled Query rather than running the SQL directly, so all three refresh paths produce identical results.
 
 ---
 
