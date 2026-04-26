@@ -245,10 +245,16 @@ def build_network_html(
                                 title="Child",
                             )
 
-    path = os.path.join(tempfile.gettempdir(), "patent_graph.html")
-    net.save_graph(path)
-    with open(path, "r") as f:
-        html = f.read()
-    os.unlink(path)
+    # Per-render unique tempfile so concurrent Streamlit sessions on the same
+    # Cloud Run instance do not overwrite or unlink each other's graph file.
+    fd, path = tempfile.mkstemp(prefix="patent_graph_", suffix=".html")
+    os.close(fd)
+    try:
+        net.save_graph(path)
+        with open(path, "r") as f:
+            html = f.read()
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
 
     return html
