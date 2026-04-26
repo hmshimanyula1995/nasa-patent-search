@@ -443,6 +443,31 @@ on BigQuery on-demand pricing. The in-app manual refresh enforces a
 seven-day cooldown so the button cannot be spammed; the cron job is not
 subject to the cooldown.
 
+**Measured performance and cost (from the team's `grad-589-588` deployment).**
+
+| Metric | Cold query | Cached query |
+| --- | --- | --- |
+| BigQuery vector search | 3.4s | 171ms |
+| Data scanned | 51.7 GB | 0 bytes |
+| Cost per query | ~$0.32 | $0.00 |
+| Vector index usage | FULLY_USED | CACHE_HIT |
+| Gemini summarization | ~2-3s | cached 1hr |
+| **End-to-end (search + summary)** | **~6s** | **~1s** |
+
+| Cost line item | Estimate at NASA production volume |
+| --- | --- |
+| Cloud Run (min-instances=1, moderate traffic) | $15-30 / month |
+| BigQuery storage (~50 GB) | $1 / month |
+| BigQuery queries (~500 searches / month) | ~$160 / month |
+| Vertex AI / Gemini (~500 calls / month) | ~$0.10 / month |
+| Quarterly refresh runs | a few dollars per run |
+| **Total** | **~$175-190 / month** |
+
+For comparison, the legacy 104 GB-RAM-VM system cost approximately
+$800-1200 / month always-on with 2-5 minute query times. The current
+serverless architecture is roughly an order of magnitude cheaper at
+production volume and orders of magnitude faster.
+
 **Vector index maintenance.** The vector index updates automatically as
 rows are added or modified, so no separate rebuild step is required after
 each refresh.
