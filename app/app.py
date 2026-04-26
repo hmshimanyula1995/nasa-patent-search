@@ -1,3 +1,4 @@
+import hashlib
 import io
 import logging
 import time
@@ -15,7 +16,7 @@ from utils.bigquery_client import (
     fetch_citation_neighbors,
 )
 from utils.gemini_client import (
-    generate_summary,
+    stream_summary,
     build_results_text,
     build_results_text_with_graph,
     GRAPH_AWARE_PROMPT,
@@ -256,12 +257,21 @@ if "patent_number" not in st.session_state:
     st.markdown(
         f"""
         <div class="empty-state">
-            <img src="{NASA_LOGO_URL}" class="empty-state-icon" />
+            <img src="{NASA_LOGO_URL}" class="empty-state-icon" alt="NASA" />
             <h2>Search NASA's Patent Database</h2>
             <p>
                 Enter a patent number in the sidebar to find semantically similar
                 patents using AI-powered vector search across millions of US patents.
+                Results stream in live with a Gemini-generated landscape analysis.
             </p>
+            <div class="empty-state-examples">
+                <div class="empty-state-examples-label">Try one of these</div>
+                <div class="empty-state-examples-list">
+                    <span class="empty-state-example">US-2007156035-A1</span>
+                    <span class="empty-state-example">US-8410469-B2</span>
+                    <span class="empty-state-example">US-9890038-B2</span>
+                </div>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -393,27 +403,19 @@ with st.status("Analyzing patents...", expanded=True) as status:
 
     search_results = search_results.sort_values(sort_col, ascending=False)
 
-    # ── Generate AI summary ──
-    st.write("Generating AI summary...")
+    # ── Build AI summary prompt inputs ──
+    # The Gemini call itself is moved out of the critical render path; it
+    # streams into the AI placeholder after the table/charts/network render.
+    # Building results_text here is cheap and keeps the prompt's data inputs
+    # consistent with the order shown in the UI.
     if ppr_available:
         results_text = build_results_text_with_graph(
             search_results, ppr_scores, citation_edges, expanded_df,
         )
-        ai_summary = generate_summary(
-            query_pub=query_patent["publication_number"],
-            query_title=query_patent["title_text"],
-            query_abstract=query_patent["abstract_text"][:800],
-            results_json=results_text,
-            prompt_template=GRAPH_AWARE_PROMPT,
-        )
+        ai_prompt_template = GRAPH_AWARE_PROMPT
     else:
         results_text = build_results_text(search_results)
-        ai_summary = generate_summary(
-            query_pub=query_patent["publication_number"],
-            query_title=query_patent["title_text"],
-            query_abstract=query_patent["abstract_text"][:800],
-            results_json=results_text,
-        )
+        ai_prompt_template = None
 
     # Rebuild full results_df with query patent + scored search results for graph
     graph_results_df = pd.concat(
@@ -523,13 +525,30 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ── AI summary ───────────────────────────────────────────────────────────
+# ── AI summary (placeholder; filled by streaming block below the network) ─
 
-with st.expander("AI Analysis (Gemini)", expanded=True):
-    st.markdown(
-        f'<div class="ai-summary">{ai_summary}</div>',
-        unsafe_allow_html=True,
-    )
+# Reserve the visual position now so the streamed content lands above the
+# results table when it arrives. The actual Gemini call happens after the
+# table, charts, and network graph render — see the streaming block near the
+# end of the script.
+ai_placeholder = st.empty()
+
+# Show a shimmering skeleton in the AI panel slot until the streaming block
+# replaces it with the real expander. Without this the panel is invisible
+# during the table/chart render, which makes the eventual stream feel like a
+# layout shift instead of a planned reveal.
+ai_placeholder.markdown(
+    """
+    <div class="ai-skeleton">
+        <div class="ai-skeleton-label">AI Analysis (Gemini)</div>
+        <div class="ai-skeleton-bar long"></div>
+        <div class="ai-skeleton-bar medium"></div>
+        <div class="ai-skeleton-bar long"></div>
+        <div class="ai-skeleton-bar short"></div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 # ── Results table ────────────────────────────────────────────────────────
 
@@ -666,6 +685,36 @@ st.markdown(
 )
 
 components.html(graph_html, height=580, scrolling=False)
+
+# ── Stream AI summary into the placeholder reserved above ────────────────
+
+# Hash results_text into the session key so the cached stream invalidates if
+# the prompt's data inputs change mid-session (e.g. user toggles ranking_mode
+# and the rebuilt results_text reorders or shifts the graph context).
+results_hash = hashlib.sha1(results_text.encode("utf-8")).hexdigest()[:12]
+session_key = (
+    f"ai_summary_streamed:{pn}|{tk}|{ranking_mode}|{ppr_available}|{results_hash}"
+)
+
+with ai_placeholder.container():
+    with st.expander("AI Analysis (Gemini)", expanded=True):
+        if session_key in st.session_state:
+            ai_summary = st.session_state[session_key]
+            st.markdown(
+                f'<div class="ai-summary">{ai_summary}</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            ai_summary = st.write_stream(
+                stream_summary(
+                    query_pub=query_patent["publication_number"],
+                    query_title=query_patent["title_text"],
+                    query_abstract=query_patent["abstract_text"][:800],
+                    results_json=results_text,
+                    prompt_template=ai_prompt_template,
+                )
+            )
+            st.session_state[session_key] = ai_summary
 
 # ── Download ─────────────────────────────────────────────────────────────
 

@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from typing import Iterator
 
 import streamlit as st
 
@@ -89,6 +90,22 @@ professional language. Avoid legal jargon. Every recommendation should reference
 a specific patent number or assignee name."""
 
 
+def _build_prompt(
+    query_pub: str,
+    query_title: str,
+    query_abstract: str,
+    results_json: str,
+    prompt_template: str | None,
+) -> str:
+    template = prompt_template if prompt_template else DEFAULT_PROMPT
+    return template.format(
+        query_pub=query_pub,
+        query_title=query_title,
+        query_abstract=query_abstract,
+        results_json=results_json,
+    )
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def generate_summary(
     query_pub: str,
@@ -99,12 +116,8 @@ def generate_summary(
 ) -> str:
     model = _get_model()
 
-    template = prompt_template if prompt_template else DEFAULT_PROMPT
-    prompt = template.format(
-        query_pub=query_pub,
-        query_title=query_title,
-        query_abstract=query_abstract,
-        results_json=results_json,
+    prompt = _build_prompt(
+        query_pub, query_title, query_abstract, results_json, prompt_template,
     )
 
     logger.info(
@@ -121,6 +134,47 @@ def generate_summary(
     except Exception as e:
         logger.error("Gemini generation failed: %s", e)
         return f"Summary generation failed: {e}"
+
+
+def stream_summary(
+    query_pub: str,
+    query_title: str,
+    query_abstract: str,
+    results_json: str,
+    prompt_template: str | None = None,
+) -> Iterator[str]:
+    """Streaming counterpart to generate_summary().
+
+    Yields text chunks as Gemini produces them. Not cached — callers should
+    stash the joined result in st.session_state if they want to skip re-streaming
+    on rerun. Mirrors generate_summary()'s error contract: on exception, yields
+    a single sanitized message chunk and logs the raw error.
+    """
+    model = _get_model()
+
+    prompt = _build_prompt(
+        query_pub, query_title, query_abstract, results_json, prompt_template,
+    )
+
+    logger.info(
+        "Gemini stream request: model=%s, prompt_length=%d chars",
+        GEMINI_MODEL, len(prompt),
+    )
+
+    try:
+        t0 = time.time()
+        response = model.generate_content(prompt, stream=True)
+        total_chars = 0
+        for chunk in response:
+            text = getattr(chunk, "text", None)
+            if text:
+                total_chars += len(text)
+                yield text
+        elapsed = time.time() - t0
+        logger.info("Gemini response: %d chars in %.2fs", total_chars, elapsed)
+    except Exception as e:
+        logger.error("Gemini streaming failed: %s", e)
+        yield f"Summary generation failed: {e}"
 
 
 def build_results_text(results_df) -> str:
