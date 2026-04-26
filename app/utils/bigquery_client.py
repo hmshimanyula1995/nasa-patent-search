@@ -7,10 +7,12 @@ import pandas as pd
 import streamlit as st
 from google.cloud import bigquery
 
+from utils.config import get_project
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "grad-589-588")
+PROJECT = get_project()
 DATASET = os.getenv("BIGQUERY_DATASET", "patent_research")
 TABLE = os.getenv("BIGQUERY_TABLE", "us_patents_indexed")
 

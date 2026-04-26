@@ -1,0 +1,54 @@
+name: Deploy to Cloud Run
+
+# Manual trigger only. NASA admins click "Run workflow" in the GitHub UI.
+# A push-on-main trigger can be added later when the team is ready for
+# continuous deployment.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write  # Required for GitHub OIDC token used by Workload Identity Federation.
+
+jobs:
+  deploy:
+    name: Build and deploy to Cloud Run
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy nasa-patent-search \
+            --source ./app \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ vars.GCP_REGION }}" \
+            --service-account="${{ vars.RUNTIME_SERVICE_ACCOUNT }}" \
+            --allow-unauthenticated \
+            --memory 1Gi \
+            --cpu 1 \
+            --port 8080 \
+            --min-instances 0 \
+            --max-instances 3 \
+            --set-env-vars="GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }},BIGQUERY_DATASET=${{ vars.BIGQUERY_DATASET }},BIGQUERY_TABLE=${{ vars.BIGQUERY_TABLE }},VERTEX_AI_LOCATION=${{ vars.GCP_REGION }},GEMINI_MODEL=${{ vars.GEMINI_MODEL }},REFRESH_TRANSFER_CONFIG=${{ vars.REFRESH_TRANSFER_CONFIG }}"
+
+      - name: Print service URL
+        run: |
+          gcloud run services describe nasa-patent-search \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ vars.GCP_REGION }}" \
+            --format='value(status.url)'
