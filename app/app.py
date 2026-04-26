@@ -373,6 +373,24 @@ with st.status("Analyzing patents...", expanded=True) as status:
         ppr_available = False
         expanded_df = None
 
+    # ── Determine score column from ranking mode ──
+    # Sort BEFORE generating the AI summary so the summary's "top 5" matches
+    # the ordering shown in the table and graph.
+    if not ppr_available:
+        score_col = "similarity"
+        sort_col = "similarity"
+    elif ranking_mode == "Text Similarity":
+        score_col = "similarity"
+        sort_col = "similarity"
+    elif ranking_mode == "Graph Importance":
+        score_col = "ppr_score"
+        sort_col = "ppr_score"
+    else:  # Blended
+        score_col = "blended_score"
+        sort_col = "blended_score"
+
+    search_results = search_results.sort_values(sort_col, ascending=False)
+
     # ── Generate AI summary ──
     st.write("Generating AI summary...")
     if ppr_available:
@@ -394,22 +412,6 @@ with st.status("Analyzing patents...", expanded=True) as status:
             query_abstract=query_patent["abstract_text"][:800],
             results_json=results_text,
         )
-
-    # ── Determine score column from ranking mode ──
-    if not ppr_available:
-        score_col = "similarity"
-        sort_col = "similarity"
-    elif ranking_mode == "Text Similarity":
-        score_col = "similarity"
-        sort_col = "similarity"
-    elif ranking_mode == "Graph Importance":
-        score_col = "ppr_score"
-        sort_col = "ppr_score"
-    else:  # Blended
-        score_col = "blended_score"
-        sort_col = "blended_score"
-
-    search_results = search_results.sort_values(sort_col, ascending=False)
 
     # Rebuild full results_df with query patent + scored search results for graph
     graph_results_df = pd.concat(
