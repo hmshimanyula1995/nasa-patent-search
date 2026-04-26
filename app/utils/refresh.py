@@ -32,6 +32,7 @@ class RefreshStatus:
     last_run_state: str | None
     last_run_error: str | None
     last_run_id: str | None
+    last_successful_run_time: datetime | None
 
 
 def get_transfer_config() -> str | None:
@@ -56,7 +57,7 @@ def get_last_refresh() -> RefreshStatus:
     """
     config_name = get_transfer_config()
     if not config_name:
-        return RefreshStatus(False, None, None, None, None)
+        return RefreshStatus(False, None, None, None, None, None)
 
     try:
         from google.cloud import bigquery_datatransfer_v1
@@ -64,26 +65,40 @@ def get_last_refresh() -> RefreshStatus:
         client = _get_transfer_client()
         request = bigquery_datatransfer_v1.ListTransferRunsRequest(
             parent=config_name,
-            page_size=5,
+            page_size=20,
         )
         runs = list(client.list_transfer_runs(request=request))
     except Exception as exc:
         logger.error("Failed to list transfer runs for %s: %s", config_name, exc)
-        return RefreshStatus(True, None, None, str(exc), None)
+        return RefreshStatus(True, None, None, str(exc), None, None)
 
     if not runs:
-        return RefreshStatus(True, None, None, None, None)
+        return RefreshStatus(True, None, None, None, None, None)
+
+    def _to_dt(ts) -> datetime | None:
+        if ts is None:
+            return None
+        if isinstance(ts, datetime):
+            return ts
+        return ts.ToDatetime(tzinfo=timezone.utc)
 
     latest = runs[0]
-    run_time = latest.run_time
-    if run_time and not isinstance(run_time, datetime):
-        run_time = run_time.ToDatetime(tzinfo=timezone.utc)
-
+    run_time = _to_dt(latest.run_time)
     state = latest.state.name if latest.state else None
     error_msg = latest.error_status.message if latest.error_status else None
     run_id = latest.name.rsplit("/", 1)[-1] if latest.name else None
 
-    return RefreshStatus(True, run_time, state, error_msg, run_id)
+    # Find the most recent SUCCEEDED run for cooldown enforcement so a failed
+    # run does not block retries for seven days.
+    last_successful_run_time = None
+    for run in runs:
+        if run.state and run.state.name == "SUCCEEDED":
+            last_successful_run_time = _to_dt(run.run_time)
+            break
+
+    return RefreshStatus(
+        True, run_time, state, error_msg, run_id, last_successful_run_time,
+    )
 
 
 def days_since(ts: datetime | None) -> int | None:
