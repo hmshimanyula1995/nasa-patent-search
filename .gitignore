@@ -4,6 +4,7 @@ __pycache__/
 .DS_Store
 .env
 .env.*
+!.env.example
 *.log
 .cache/
 .ipynb_checkpoints/

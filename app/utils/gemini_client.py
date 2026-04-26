@@ -4,12 +4,14 @@ import time
 
 import streamlit as st
 
+from utils.config import get_project
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-GCP_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "grad-589-588")
+GCP_PROJECT = get_project()
 VERTEX_LOCATION = os.getenv("VERTEX_AI_LOCATION", "us-central1")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 
 @st.cache_resource

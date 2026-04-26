@@ -1,0 +1,66 @@
+name: Refresh Patent Data
+
+# Manual trigger only. Triggers the BigQuery Scheduled Query that performs
+# the patent data MERGE. This is identical in effect to clicking "Run now"
+# on the Scheduled Query in the BigQuery console, or clicking the in-app
+# "Refresh Patent Data Now" button on the Cloud Run service.
+#
+# The cron-based refresh is configured on the Scheduled Query itself
+# (quarterly by default) and runs without using this workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type REFRESH to confirm. Each run scans tens of GB and costs a few dollars.'
+        required: true
+        type: string
+
+jobs:
+  refresh:
+    name: Trigger BigQuery refresh
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Validate confirmation
+        if: ${{ inputs.confirm != 'REFRESH' }}
+        run: |
+          echo "Confirmation input was '${{ inputs.confirm }}'. Expected 'REFRESH'." >&2
+          echo "The refresh was not triggered." >&2
+          exit 1
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Validate REFRESH_TRANSFER_CONFIG is set
+        run: |
+          if [ -z "${{ vars.REFRESH_TRANSFER_CONFIG }}" ]; then
+            echo "REFRESH_TRANSFER_CONFIG repository variable is not set." >&2
+            echo "Configure it under Settings > Secrets and variables > Actions > Variables." >&2
+            exit 1
+          fi
+
+      - name: Start manual run of the BigQuery Scheduled Query
+        run: |
+          bq --project_id="${{ vars.GCP_PROJECT_ID }}" \
+            mk --transfer_run \
+            --run_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            "${{ vars.REFRESH_TRANSFER_CONFIG }}"
+
+      - name: Show recent run history
+        run: |
+          bq --project_id="${{ vars.GCP_PROJECT_ID }}" \
+            ls --transfer_run \
+            --max_results=5 \
+            "${{ vars.REFRESH_TRANSFER_CONFIG }}"
