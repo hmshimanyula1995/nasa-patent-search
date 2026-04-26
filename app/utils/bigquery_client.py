@@ -124,7 +124,7 @@ def normalize_patent_number(raw_input: str) -> str | None:
 
     Returns the matched publication_number or None if not found.
     """
-    cleaned = raw_input.strip().replace(",", "").replace(" ", "")
+    cleaned = raw_input.strip().replace(",", "").replace(" ", "").upper()
     if not cleaned:
         return None
 
@@ -134,7 +134,7 @@ def normalize_patent_number(raw_input: str) -> str | None:
         return cleaned
 
     # Strip leading "US" prefix if present (e.g., US8410469 -> 8410469)
-    number = re.sub(r"^US", "", cleaned, flags=re.IGNORECASE)
+    number = re.sub(r"^US", "", cleaned)
 
     # Must be numeric at this point
     if not number.isdigit():
