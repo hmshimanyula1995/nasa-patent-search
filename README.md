@@ -25,10 +25,11 @@ A semantic patent search tool built for NASA's Technology Transfer Office (TTO).
 15. [Error Handling and Graceful Degradation](#15-error-handling-and-graceful-degradation)
 16. [Observability -- Structured Logging](#16-observability----structured-logging)
 17. [Deployment](#17-deployment)
-18. [Data Schema](#18-data-schema)
-19. [Environment Variables](#19-environment-variables)
-20. [Performance](#20-performance)
-21. [Dependencies](#21-dependencies)
+18. [Patent Data Refresh](#18-patent-data-refresh)
+19. [Data Schema](#19-data-schema)
+20. [Environment Variables](#20-environment-variables)
+21. [Performance](#21-performance)
+22. [Dependencies](#22-dependencies)
 
 ---
 
@@ -80,6 +81,7 @@ Streamlit Rendering + ZIP Download + Print/PDF Export
 - **Analytics charts** -- top assignees, top inventors, and CPC technology distribution
 - **Print/PDF ready** -- `Ctrl+P` produces a clean landscape layout with full-width tables and stacked charts
 - **Download package** -- ZIP file with CSV results, AI summary text, and standalone network graph HTML
+- **Patent data refresh** -- in-app refresh button (with descriptive freshness status and a seven-day cooldown) plus a quarterly BigQuery Scheduled Query and an optional GitHub Actions workflow, all driving the same MERGE upsert
 
 **Architecture:**
 
@@ -99,22 +101,27 @@ Streamlit Rendering + ZIP Download + Print/PDF Export
 ## 2. Project Structure
 
 ```
+.github/
+  workflows/
+    deploy.yml                # Manual GitHub Actions workflow: build + deploy to Cloud Run
+    refresh-data.yml          # Manual GitHub Actions workflow: trigger BigQuery refresh
 app/
-  app.py                      # Main Streamlit application (557 lines)
+  app.py                      # Main Streamlit application
   requirements.txt            # Python dependencies
   Dockerfile                  # Cloud Run container
+  .env.example                # Template of every runtime environment variable
   .streamlit/config.toml      # Theme + server config
   utils/
     __init__.py
-    bigquery_client.py         # BigQuery queries, data retrieval, patent normalization (292 lines)
-    gemini_client.py           # Gemini API client + prompt templates (202 lines)
-    graph_ranking.py           # PageRank computation + score blending (202 lines)
-    graph.py                   # Pyvis network graph generation (254 lines)
-    charts.py                  # Plotly chart generation (180 lines)
-    styles.py                  # NASA light theme CSS + print styles (565 lines)
+    config.py                 # Shared GCP project resolver (env var or ADC)
+    bigquery_client.py        # BigQuery queries, data retrieval, patent normalization
+    gemini_client.py          # Gemini API client + prompt templates
+    graph_ranking.py          # PageRank computation + score blending
+    graph.py                  # Pyvis network graph generation
+    charts.py                 # Plotly chart generation
+    styles.py                 # NASA light theme CSS + print styles
+    refresh.py                # BigQuery Data Transfer integration for the in-app refresh
 ```
-
-Total application code is approximately 2,250 lines of Python.
 
 ---
 
@@ -170,7 +177,7 @@ gcloud run deploy nasa-patent-search --source . --project grad-589-588 --region 
 
 Zero-downtime rolling update.
 
-**For production (NASA):** Use `--no-allow-unauthenticated` and enable Identity-Aware Proxy (IAP). See `DEPLOYMENT.md` for the full production deployment guide including IAP setup, service accounts, custom domains, and quarterly data maintenance.
+**For production (NASA):** the manual `gcloud` command above is for our team's `grad-589-588` project. NASA's deploy is performed by the GitHub Actions workflow `deploy.yml`, which authenticates via Workload Identity Federation and reads all GCP identifiers from GitHub Variables and Secrets. See [`MIGRATION.md`](MIGRATION.md) for the full handover, including WIF setup, Scheduled Query creation for the recurring data refresh, and verification steps.
 
 ---
 
@@ -485,9 +492,9 @@ This toggle also controls which score is used for graph node coloring and sizing
 **Model initialization:**
 
 ```python
-GCP_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "grad-589-588")
+GCP_PROJECT = get_project()  # env var GOOGLE_CLOUD_PROJECT, falls back to ADC
 VERTEX_LOCATION = os.getenv("VERTEX_AI_LOCATION", "us-central1")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 @st.cache_resource
 def _get_model():
@@ -867,39 +874,46 @@ ENTRYPOINT ["streamlit", "run", "app.py", \
     "--server.port=8080", "--server.address=0.0.0.0"]
 ```
 
-**Deploy command (for team testing):**
+**Two deploy paths.** The repository ships with a manual GitHub Actions workflow (`.github/workflows/deploy.yml`) that authenticates to GCP via Workload Identity Federation (no service account JSON keys) and runs `gcloud run deploy --source ./app`. This is the production path NASA will use after wiring up the WIF setup described in `MIGRATION.md`. For internal team deploys to the existing `grad-589-588` project, the same `gcloud run deploy --source ./app` command works locally.
 
-```bash
-cd app/
-gcloud run deploy nasa-patent-search \
-  --source . \
-  --project grad-589-588 \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --memory 1Gi \
-  --cpu 1 \
-  --port 8080 \
-  --min-instances 0 \
-  --max-instances 3 \
-  --set-env-vars "GOOGLE_CLOUD_PROJECT=grad-589-588,BIGQUERY_DATASET=patent_research,BIGQUERY_TABLE=us_patents_indexed,VERTEX_AI_LOCATION=us-central1,GEMINI_MODEL=gemini-2.5-flash"
-```
+**Performance baseline (measured on `grad-589-588`):**
 
-Cloud Build handles the Docker build. Cloud Run serves the container. No CI/CD pipeline -- this single command does everything.
+| Metric | Cold query | Cached query |
+| --- | --- | --- |
+| BigQuery vector search | 3.4s | 171ms |
+| Data scanned | 51.7 GB | 0 bytes |
+| Cost per query | ~$0.32 | $0.00 |
+| Vector index usage | FULLY_USED | CACHE_HIT |
+| Gemini summarization | ~2-3s | cached 1hr |
+| **End-to-end (search + summary)** | **~6s** | **~1s** |
 
-**For production (NASA):** Use `--no-allow-unauthenticated` and enable Identity-Aware Proxy (IAP). See `DEPLOYMENT.md` for the full production deployment guide including IAP setup, service accounts, custom domains, and quarterly data maintenance.
+For comparison, the legacy 104 GB-RAM-VM system took 2-5 minutes per search and ran ~$800-1200/month always-on; the current serverless architecture is roughly $35-40/month at team-testing volume and ~$175-190/month at NASA production volume.
 
-**Redeploying after code changes:**
-
-```bash
-cd app/
-gcloud run deploy nasa-patent-search --source . --project grad-589-588 --region us-central1
-```
-
-Zero-downtime rolling update.
+**For NASA handover:** see [`MIGRATION.md`](MIGRATION.md) for the full setup and deploy guide (APIs to enable, service accounts, Workload Identity Federation, BigQuery table population, Scheduled Query for the recurring refresh, GitHub Variables and Secrets, and verification steps).
 
 ---
 
-## 18. Data Schema
+## 18. Patent Data Refresh
+
+The patent index is rebuilt incrementally, not regenerated from scratch. A single BigQuery `MERGE` upserts new US patents from the public Google Patents dataset and updates citation arrays on existing rows. Embeddings come from Google's pre-computed `embedding_v1` column, so no GPU work is required at refresh time and refresh cost is bounded to the BigQuery scan.
+
+**Three triggers, one MERGE.** A single BigQuery Scheduled Query holds the SQL. All three trigger paths invoke the same Scheduled Query and produce the same outcome:
+
+| Trigger | Who uses it | Notes |
+| --- | --- | --- |
+| Quarterly cron | Automatic | Runs without human intervention; BigQuery handles failures and retries. |
+| In-app sidebar button | Anyone with access to the app URL | Subject to a server-side seven-day cooldown to bound cost from accidental clicks. The app shows last-refresh timestamp, days-since, color-coded freshness, and a top-of-page banner when data is older than 90 days. |
+| GitHub Actions workflow `refresh-data.yml` | Repository admins | Manual `workflow_dispatch`, requires typing `REFRESH` to confirm. |
+
+**Implementation.** `app/utils/refresh.py` calls `start_manual_transfer_runs` on the BigQuery Data Transfer API. The Cloud Run runtime service account needs `roles/bigquerydatatransfer.user` (and so does the GitHub Actions deploy SA if you intend to use the workflow trigger). The `REFRESH_TRANSFER_CONFIG` environment variable must be set to the Scheduled Query's resource name; when unset, the in-app refresh section is hidden.
+
+**Cooldown semantics.** The seven-day cooldown is keyed off the most recent *successful* run, not the most recent run, so a failed refresh does not block retries. Failed runs are still surfaced in the status panel.
+
+The exact `bq query --schedule="every quarter" ...` command that creates the Scheduled Query is in [`MIGRATION.md`](MIGRATION.md#a7-create-the-scheduled-query-that-performs-the-refresh).
+
+---
+
+## 19. Data Schema
 
 **Table:** `grad-589-588.patent_research.us_patents_indexed`
 
@@ -934,21 +948,22 @@ Zero-downtime rolling update.
 
 ---
 
-## 19. Environment Variables
+## 20. Environment Variables
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `GOOGLE_CLOUD_PROJECT` | `grad-589-588` | GCP project for BigQuery + Vertex AI |
+| `GOOGLE_CLOUD_PROJECT` | resolved from ADC | GCP project for BigQuery + Vertex AI. Falls back to the project from Application Default Credentials when unset, which is how Cloud Run picks up its own project automatically. |
 | `BIGQUERY_DATASET` | `patent_research` | BigQuery dataset name |
 | `BIGQUERY_TABLE` | `us_patents_indexed` | BigQuery table name |
 | `VERTEX_AI_LOCATION` | `us-central1` | Vertex AI endpoint region |
-| `GEMINI_MODEL` | `gemini-2.5-pro` | Gemini model ID (deployed with `gemini-2.5-flash` for lower cost/latency) |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model ID. Stay on 2.5 until 3.x reaches GA. |
+| `REFRESH_TRANSFER_CONFIG` | unset | Resource name of the BigQuery Scheduled Query that performs the patent data refresh, e.g. `projects/.../transferConfigs/...`. The in-app refresh button is hidden when this is unset. |
 
-No secrets are hardcoded. Authentication uses Application Default Credentials (ADC) -- on Cloud Run, the service account is attached automatically. Locally, run `gcloud auth application-default login`.
+No secrets are hardcoded. Authentication uses Application Default Credentials (ADC) -- on Cloud Run, the service account is attached automatically. Locally, run `gcloud auth application-default login`. See [`app/.env.example`](app/.env.example) for a copy-paste template.
 
 ---
 
-## 20. Performance
+## 21. Performance
 
 | Stage | Cold | Cached |
 |-------|------|--------|
@@ -966,17 +981,18 @@ No secrets are hardcoded. Authentication uses Application Default Credentials (A
 
 ---
 
-## 21. Dependencies
+## 22. Dependencies
 
 ```
-streamlit>=1.38.0                # UI framework
-google-cloud-bigquery>=3.25.0    # BigQuery client
-google-cloud-aiplatform>=1.60.0  # Vertex AI + Gemini
-db-dtypes>=1.2.0                 # BigQuery date/time types
-pandas>=2.2.0                    # DataFrames
-plotly>=5.22.0                   # Chart rendering
-pyvis>=0.3.2                     # Network graph HTML export
-networkx>=3.3                    # PageRank computation
+streamlit>=1.38.0                          # UI framework
+google-cloud-bigquery>=3.25.0              # BigQuery client (vector search, citation expansion)
+google-cloud-bigquery-datatransfer>=3.13.0 # Triggers manual runs of the refresh Scheduled Query
+google-cloud-aiplatform>=1.60.0            # Vertex AI + Gemini
+db-dtypes>=1.2.0                           # BigQuery date/time types
+pandas>=2.2.0                              # DataFrames
+plotly>=5.22.0                             # Chart rendering
+pyvis>=0.3.2                               # Network graph HTML export
+networkx>=3.3                              # PageRank computation
 ```
 
 Install: `pip install -r requirements.txt`
@@ -991,10 +1007,9 @@ Requires `gcloud auth application-default login` for local BigQuery/Vertex AI ac
 
 | Document | Description |
 |----------|-------------|
-| [`DEPLOYMENT.md`](DEPLOYMENT.md) | Full deployment guide including production setup with IAP, service accounts, and data maintenance |
-| [`REQUIREMENTS_TRACEABILITY.md`](REQUIREMENTS_TRACEABILITY.md) | Maps NASA TTO requirements to implementation |
-| [`GRAPH_RANKING_PROPOSAL.md`](GRAPH_RANKING_PROPOSAL.md) | Design document for the PageRank integration |
-| [`GRAPHRAG_EVALUATION.md`](GRAPHRAG_EVALUATION.md) | Evaluation of graph-based RAG approaches |
+| [`MIGRATION.md`](MIGRATION.md) | End-to-end deployment guide for a new GCP project: APIs, service accounts, Workload Identity Federation, BigQuery table population, Scheduled Query, GitHub Variables and Secrets, and the deploy workflow. The canonical NASA handover doc. |
+| [`ARCHITECTURE_ANALYSIS.md`](ARCHITECTURE_ANALYSIS.md) | Comparison between the legacy 104 GB-VM system and the current serverless architecture. Useful background on why the architecture looks the way it does. |
+| [`BIGQUERY_QUERIES.md`](BIGQUERY_QUERIES.md) | Reference of every BigQuery query used to build and validate the data layer. |
 
 ## License
 
