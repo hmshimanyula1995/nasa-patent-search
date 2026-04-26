@@ -1,6 +1,19 @@
+import base64
+from pathlib import Path
+
 import streamlit as st
 
-NASA_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/NASA_logo.svg/200px-NASA_logo.svg.png"
+
+def _load_nasa_logo_data_uri() -> str:
+    # Bundle the NASA meatball SVG as a data URI so the logo renders without
+    # any external dependency. Fixes broken hotlinks (Wikimedia rejects
+    # non-browser referers with HTTP 400).
+    svg_path = Path(__file__).resolve().parent.parent / "assets" / "nasa_logo.svg"
+    encoded = base64.b64encode(svg_path.read_bytes()).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded}"
+
+
+NASA_LOGO_URL = _load_nasa_logo_data_uri()
 
 
 def inject_custom_css():
@@ -168,17 +181,29 @@ def inject_custom_css():
 
     /* ── Text inputs ── */
     [data-testid="stTextInput"] input {
-        border: 1.5px solid #DCE4EF;
+        border: 1.5px solid #9DA9BA;
+        background-color: #F8FAFC;
+        color: #1A1F2C;
         border-radius: 10px;
         font-family: 'Public Sans', sans-serif;
         font-size: 14px;
         padding: 10px 14px;
-        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+    }
+
+    [data-testid="stTextInput"] input::placeholder {
+        color: #6B7480;
+        opacity: 1;
+    }
+
+    [data-testid="stTextInput"] input:hover {
+        border-color: #6B7480;
     }
 
     [data-testid="stTextInput"] input:focus {
         border-color: #105BD8;
-        box-shadow: 0 0 0 3px rgba(16, 91, 216, 0.12);
+        background-color: #FFFFFF;
+        box-shadow: 0 0 0 3px rgba(16, 91, 216, 0.18);
     }
 
     /* ── Slider ── */
@@ -328,32 +353,118 @@ def inject_custom_css():
         margin-left: auto;
     }
 
-    /* ── Empty state ── */
+    /* ── Empty state hero ── */
     .empty-state {
         text-align: center;
-        padding: 100px 20px 60px;
+        padding: 80px 20px 60px;
+        animation: empty-state-fade-in 0.45s ease-out both;
+    }
+
+    @keyframes empty-state-fade-in {
+        from { opacity: 0; transform: translateY(8px); }
+        to   { opacity: 1; transform: translateY(0); }
     }
 
     .empty-state-icon {
-        width: 100px;
+        width: 110px;
         margin-bottom: 28px;
+        filter: drop-shadow(0 6px 16px rgba(11, 61, 145, 0.18));
     }
 
     .empty-state h2 {
         color: #0B3D91;
         font-family: 'Inter', sans-serif;
-        font-weight: 700;
-        font-size: 26px;
+        font-weight: 800;
+        font-size: 30px;
+        letter-spacing: -0.01em;
         margin: 0 0 10px 0;
     }
 
     .empty-state p {
         color: #5B616B;
         font-family: 'Public Sans', sans-serif;
-        max-width: 520px;
+        max-width: 560px;
         margin: 0 auto;
         font-size: 15px;
         line-height: 1.7;
+    }
+
+    .empty-state-examples {
+        margin: 36px auto 0;
+        max-width: 560px;
+        text-align: left;
+        background: #F8FAFC;
+        border: 1px solid #E1E8F2;
+        border-radius: 14px;
+        padding: 22px 26px;
+    }
+
+    .empty-state-examples-label {
+        font-family: 'Inter', sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 1.6px;
+        text-transform: uppercase;
+        color: #5B616B;
+        margin-bottom: 12px;
+    }
+
+    .empty-state-examples-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .empty-state-example {
+        font-family: 'DM Mono', monospace;
+        font-size: 13px;
+        color: #0B3D91;
+        background: #FFFFFF;
+        border: 1px solid #DCE4EF;
+        border-radius: 8px;
+        padding: 6px 12px;
+    }
+
+    /* ── AI summary skeleton (shown while results render before the stream) ── */
+    .ai-skeleton {
+        border: 1px solid #E1E8F2;
+        border-radius: 14px;
+        padding: 22px 26px;
+        background: #FFFFFF;
+        margin: 16px 0;
+    }
+
+    .ai-skeleton-label {
+        font-family: 'Inter', sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 1.6px;
+        text-transform: uppercase;
+        color: #5B616B;
+        margin-bottom: 16px;
+    }
+
+    .ai-skeleton-bar {
+        height: 12px;
+        border-radius: 6px;
+        margin-bottom: 10px;
+        background: linear-gradient(
+            90deg,
+            #EEF2F8 0%,
+            #DCE4EF 50%,
+            #EEF2F8 100%
+        );
+        background-size: 200% 100%;
+        animation: ai-skeleton-shimmer 1.4s ease-in-out infinite;
+    }
+
+    .ai-skeleton-bar.short { width: 62%; }
+    .ai-skeleton-bar.medium { width: 84%; }
+    .ai-skeleton-bar.long { width: 96%; }
+
+    @keyframes ai-skeleton-shimmer {
+        0%   { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
     }
 
     /* ── Header banner ── */
