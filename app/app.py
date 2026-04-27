@@ -137,55 +137,45 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("**Patent Data Refresh**")
     st.caption(
-        "The search index is built from the public Google Patents dataset. "
-        "New US patents are added by re-running a BigQuery MERGE that joins "
-        "the source datasets and upserts new rows. A scheduled quarterly job "
-        "runs this automatically. You can also trigger a manual refresh "
-        "below if newer patents are needed before the next scheduled run."
+        "The patent index updates automatically every 3 months. "
+        "Use the button below if you need the latest patents sooner."
     )
 
     refresh_status = get_last_refresh()
 
     if not refresh_status.configured:
         st.caption(
-            ":grey[Manual refresh is not configured for this deployment. "
-            "An admin must set the `REFRESH_TRANSFER_CONFIG` environment "
-            "variable to the resource name of a BigQuery Scheduled Query.]"
+            ":grey[Manual refresh is not available in this environment. "
+            "Contact an administrator if you need the latest patents.]"
         )
     else:
         if refresh_status.last_run_time is None:
-            st.info(
-                "No previous refresh run is on record. The first scheduled "
-                "or manual refresh will populate this status."
-            )
+            st.info("No refresh has run yet.")
         else:
-            last_run_str = refresh_status.last_run_time.strftime("%Y-%m-%d %H:%M UTC")
             n_days = days_since(refresh_status.last_run_time) or 0
-            day_word = "day" if n_days == 1 else "days"
+            if n_days == 0:
+                when = "today"
+            elif n_days == 1:
+                when = "yesterday"
+            else:
+                when = f"{n_days} days ago"
 
             if n_days <= AGING_DAYS:
-                st.success(
-                    f"Patent data is current. Last refresh ran on "
-                    f"{last_run_str} ({n_days} {day_word} ago)."
-                )
+                st.success(f"Patent data is current. Last refreshed {when}.")
             elif n_days <= STALE_WARNING_DAYS:
                 st.warning(
-                    f"Patent data is aging. Last refresh ran on "
-                    f"{last_run_str} ({n_days} {day_word} ago). The next "
-                    "scheduled refresh runs quarterly."
+                    f"Patent data is getting old — last refreshed {when}."
                 )
             else:
                 st.error(
-                    f"Patent data is stale. Last refresh ran on "
-                    f"{last_run_str} ({n_days} {day_word} ago). Trigger a "
-                    "refresh below or check the BigQuery Scheduled Queries "
-                    "page in the GCP console."
+                    f"Patent data is more than {STALE_WARNING_DAYS} days old. "
+                    "Use the button below to pull the latest patents."
                 )
 
             if refresh_status.last_run_state and refresh_status.last_run_state != "SUCCEEDED":
                 st.caption(
-                    f"Last run state: `{refresh_status.last_run_state}`. "
-                    f"{refresh_status.last_run_error or ''}"
+                    f"Last refresh did not finish successfully "
+                    f"({refresh_status.last_run_state.lower()})."
                 )
 
         # In-flight gate: cooldown is keyed off the last *successful* run, so
@@ -201,9 +191,8 @@ with st.sidebar:
                 key="refresh_running",
             )
             st.caption(
-                "A refresh is currently running in BigQuery. The cooldown "
-                f"({COOLDOWN_DAYS} days) starts once it completes. Status "
-                "updates roughly every minute; reload this page to re-check."
+                "A refresh is running. Reload this page in a minute to check "
+                "again."
             )
         else:
             # Cooldown is keyed off the last *successful* run, so a failed run
@@ -218,9 +207,9 @@ with st.sidebar:
                     key="refresh_disabled",
                 )
                 st.caption(
-                    f"Manual refreshes are limited to once every {COOLDOWN_DAYS} "
-                    "days to prevent excessive BigQuery scan costs. The scheduled "
-                    "quarterly job runs regardless of this cooldown."
+                    f"Manual refreshes are limited to once every "
+                    f"{COOLDOWN_DAYS} days. The automatic refresh continues "
+                    "to run every 3 months."
                 )
             else:
                 if st.button(
@@ -229,20 +218,16 @@ with st.sidebar:
                     type="secondary",
                     key="refresh_trigger",
                 ):
-                    with st.spinner("Starting the refresh job in BigQuery..."):
+                    with st.spinner("Starting refresh…"):
                         ok, msg = trigger_refresh()
                     if ok:
                         st.toast(msg, icon="✅")
                     else:
                         st.toast(msg, icon="⚠️")
                 st.caption(
-                    "Triggers a BigQuery MERGE that pulls the latest US patents "
-                    "from the public Google Patents dataset and upserts them "
-                    "into the search index. The query scans tens of GB and "
-                    "typically costs a few dollars per run. The job runs "
-                    "asynchronously in BigQuery and finishes in a few minutes; "
-                    "reload this page after it completes to see the updated "
-                    "last-refresh timestamp."
+                    "Pulls the newest US patents into the search index. "
+                    "Runs in the background and takes about a minute. Reload "
+                    "this page when it finishes to see the updated date."
                 )
 
 # ── Main Area ────────────────────────────────────────────────────────────
@@ -260,10 +245,9 @@ if (
         col_msg, col_action = st.columns([6, 1])
         with col_msg:
             st.warning(
-                f"The patent search index has not been refreshed in "
-                f"{_n_days} days. Search results may be missing recent "
-                "patents. Trigger a refresh from the sidebar or wait for "
-                "the next scheduled quarterly run."
+                f"The patent index has not been refreshed in {_n_days} days. "
+                "Some recent patents may be missing from your results. "
+                "Use the refresh button in the sidebar to pull the latest."
             )
         with col_action:
             if st.button("Dismiss", key="dismiss_stale_banner"):
