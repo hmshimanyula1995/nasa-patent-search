@@ -15,7 +15,7 @@ VERTEX_LOCATION = os.getenv("VERTEX_AI_LOCATION", "us-central1")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def _get_model():
     import vertexai
     from vertexai.generative_models import GenerativeModel
