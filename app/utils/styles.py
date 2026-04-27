@@ -531,15 +531,19 @@ def inject_custom_css():
         display: inline-block;
     }
 
-    /* Score-tier sizing: bigger dot = better score. Mirrors the network
-       graph's size-by-score encoding (graph.py: 18 + score*32) so color-blind
-       users get a size hierarchy that reinforces the ordering. */
+    /* Score-tier sizing: bigger dot = better score. The spread (4px steps,
+       6→26px) is calibrated so the legend reads as visibly ordered AND the
+       largest legend dot is in the same visual register as the network
+       graph's smaller-to-mid nodes (graph.py uses 14→66 after the amplified
+       formula). For ordinal data, size + color are the right encoding;
+       shape distinctions stay reserved for categorical roles like
+       result-vs-citation-network. */
     .legend-dot.tier-1 { width: 6px;  height: 6px;  }
-    .legend-dot.tier-2 { width: 8px;  height: 8px;  }
-    .legend-dot.tier-3 { width: 10px; height: 10px; }
-    .legend-dot.tier-4 { width: 12px; height: 12px; }
-    .legend-dot.tier-5 { width: 14px; height: 14px; }
-    .legend-dot.tier-6 { width: 16px; height: 16px; }
+    .legend-dot.tier-2 { width: 10px; height: 10px; }
+    .legend-dot.tier-3 { width: 14px; height: 14px; }
+    .legend-dot.tier-4 { width: 18px; height: 18px; }
+    .legend-dot.tier-5 { width: 22px; height: 22px; }
+    .legend-dot.tier-6 { width: 26px; height: 26px; }
 
     .legend-triangle {
         width: 0;

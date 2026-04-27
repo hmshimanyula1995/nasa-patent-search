@@ -131,7 +131,7 @@ def build_network_html(
         title_text = row.get("title_text", "")
         assignee = row.get("primary_assignee", "N/A")
         node_color = _score_color(score)
-        node_size = 18 + int(score * 32)
+        node_size = 14 + int(score * 52)
 
         net.add_node(
             pub,
@@ -166,7 +166,7 @@ def build_network_html(
             title_text = row.get("title_text", "")
             assignee = row.get("primary_assignee", "N/A")
             node_color = _score_color(score)
-            node_size = 18 + int(score * 32)
+            node_size = 14 + int(score * 52)
 
             net.add_node(
                 pub,
