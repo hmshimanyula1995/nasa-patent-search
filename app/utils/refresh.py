@@ -149,25 +149,21 @@ def trigger_refresh() -> tuple[bool, str]:
     except Exception as exc:
         logger.error("Failed to start manual transfer run: %s", exc)
         return False, (
-            "The refresh could not be started. The Cloud Run service account "
-            "may be missing the BigQuery Data Transfer permissions, or the "
-            "Scheduled Query resource name in REFRESH_TRANSFER_CONFIG may be "
-            "incorrect. Ask an admin to check the Cloud Run logs."
+            "The refresh could not be started. Please contact an "
+            "administrator."
         )
 
     runs = list(response.runs) if response.runs else []
     if not runs:
         return False, (
-            "The refresh request was accepted but no run was created. "
-            "Check the BigQuery Scheduled Queries page in the GCP console."
+            "The refresh did not start. Please try again in a few minutes."
         )
 
     run_id = runs[0].name.rsplit("/", 1)[-1]
     logger.info("Started manual transfer run: %s", run_id)
     get_last_refresh.clear()
     return True, (
-        f"Refresh started successfully. Job ID: {run_id}. "
-        "The refresh runs in BigQuery and typically completes in a few "
-        "minutes. Reload this page after it finishes to see the updated "
-        "last-refresh timestamp."
+        "Refresh started. It runs in the background and usually finishes "
+        "in about a minute. Reload this page when it completes to see "
+        "the updated date."
     )
