@@ -137,8 +137,8 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("**Patent Data Refresh**")
     st.caption(
-        "The patent index updates automatically every 3 months. "
-        "Use the button below if you need the latest patents sooner."
+        "Updates automatically every 3 months — use the button below if "
+        "you need it sooner."
     )
 
     refresh_status = get_last_refresh()
@@ -190,10 +190,7 @@ with st.sidebar:
                 use_container_width=True,
                 key="refresh_running",
             )
-            st.caption(
-                "A refresh is running. Reload this page in a minute to check "
-                "again."
-            )
+            st.caption("Check back in a minute.")
         else:
             # Cooldown is keyed off the last *successful* run, so a failed run
             # does not block an admin from retrying immediately.
@@ -206,11 +203,7 @@ with st.sidebar:
                     use_container_width=True,
                     key="refresh_disabled",
                 )
-                st.caption(
-                    f"Manual refreshes are limited to once every "
-                    f"{COOLDOWN_DAYS} days. The automatic refresh continues "
-                    "to run every 3 months."
-                )
+                st.caption("Manual refreshes are limited to once a week.")
             else:
                 if st.button(
                     "Refresh Patent Data Now",
@@ -224,11 +217,7 @@ with st.sidebar:
                         st.toast(msg, icon="✅")
                     else:
                         st.toast(msg, icon="⚠️")
-                st.caption(
-                    "Pulls the newest US patents into the search index. "
-                    "Runs in the background and takes about a minute. Reload "
-                    "this page when it finishes to see the updated date."
-                )
+                st.caption("Pulls the newest US patents into the index.")
 
 # ── Main Area ────────────────────────────────────────────────────────────
 
