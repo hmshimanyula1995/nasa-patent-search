@@ -110,12 +110,12 @@ with st.sidebar:
             <span class="legend-item"><span class="legend-dot" style="background:#DD361C;"></span> Child</span>
             <br/><br/>
             <span class="legend-section-label">Node Score</span>
-            <span class="legend-item"><span class="legend-dot" style="background:#1a7431;"></span> 95%+</span>
-            <span class="legend-item"><span class="legend-dot" style="background:#2E8540;"></span> 90%+</span>
-            <span class="legend-item"><span class="legend-dot" style="background:#4A90D9;"></span> 85%+</span>
-            <span class="legend-item"><span class="legend-dot" style="background:#F0C419;"></span> 80%+</span>
-            <span class="legend-item"><span class="legend-dot" style="background:#FF9D1E;"></span> 75%+</span>
-            <span class="legend-item"><span class="legend-dot" style="background:#DD361C;"></span> &lt;75%</span>
+            <span class="legend-item"><span class="legend-dot tier-6" style="background:#1a7431;"></span> 95%+</span>
+            <span class="legend-item"><span class="legend-dot tier-5" style="background:#2E8540;"></span> 90%+</span>
+            <span class="legend-item"><span class="legend-dot tier-4" style="background:#4A90D9;"></span> 85%+</span>
+            <span class="legend-item"><span class="legend-dot tier-3" style="background:#F0C419;"></span> 80%+</span>
+            <span class="legend-item"><span class="legend-dot tier-2" style="background:#FF9D1E;"></span> 75%+</span>
+            <span class="legend-item"><span class="legend-dot tier-1" style="background:#DD361C;"></span> &lt;75%</span>
             <br/><br/>
             <span class="legend-section-label">Node Shape</span>
             <span class="legend-item"><span class="legend-dot" style="background:#5B616B;"></span> Search result</span>
@@ -188,44 +188,62 @@ with st.sidebar:
                     f"{refresh_status.last_run_error or ''}"
                 )
 
-        # Cooldown is keyed off the last *successful* run, so a failed run
-        # does not block an admin from retrying immediately.
-        cooldown = cooldown_remaining(refresh_status.last_successful_run_time)
-        if cooldown > 0:
-            day_word = "day" if cooldown == 1 else "days"
+        # In-flight gate: cooldown is keyed off the last *successful* run, so
+        # during a first PENDING/RUNNING run cooldown_remaining returns 0 and
+        # the button would stay enabled, letting a user spam-trigger duplicate
+        # multi-dollar BigQuery scans. Block the button while a run is active;
+        # the existing cooldown branch then takes over once the run succeeds.
+        if refresh_status.last_run_state in {"PENDING", "RUNNING"}:
             st.button(
-                f"Manual refresh available in {cooldown} {day_word}",
+                "Refresh in progress…",
                 disabled=True,
                 use_container_width=True,
-                key="refresh_disabled",
+                key="refresh_running",
             )
             st.caption(
-                f"Manual refreshes are limited to once every {COOLDOWN_DAYS} "
-                "days to prevent excessive BigQuery scan costs. The scheduled "
-                "quarterly job runs regardless of this cooldown."
+                "A refresh is currently running in BigQuery. The cooldown "
+                f"({COOLDOWN_DAYS} days) starts once it completes. Status "
+                "updates roughly every minute; reload this page to re-check."
             )
         else:
-            if st.button(
-                "Refresh Patent Data Now",
-                use_container_width=True,
-                type="secondary",
-                key="refresh_trigger",
-            ):
-                with st.spinner("Starting the refresh job in BigQuery..."):
-                    ok, msg = trigger_refresh()
-                if ok:
-                    st.toast(msg, icon="✅")
-                else:
-                    st.toast(msg, icon="⚠️")
-            st.caption(
-                "Triggers a BigQuery MERGE that pulls the latest US patents "
-                "from the public Google Patents dataset and upserts them "
-                "into the search index. The query scans tens of GB and "
-                "typically costs a few dollars per run. The job runs "
-                "asynchronously in BigQuery and finishes in a few minutes; "
-                "reload this page after it completes to see the updated "
-                "last-refresh timestamp."
-            )
+            # Cooldown is keyed off the last *successful* run, so a failed run
+            # does not block an admin from retrying immediately.
+            cooldown = cooldown_remaining(refresh_status.last_successful_run_time)
+            if cooldown > 0:
+                day_word = "day" if cooldown == 1 else "days"
+                st.button(
+                    f"Manual refresh available in {cooldown} {day_word}",
+                    disabled=True,
+                    use_container_width=True,
+                    key="refresh_disabled",
+                )
+                st.caption(
+                    f"Manual refreshes are limited to once every {COOLDOWN_DAYS} "
+                    "days to prevent excessive BigQuery scan costs. The scheduled "
+                    "quarterly job runs regardless of this cooldown."
+                )
+            else:
+                if st.button(
+                    "Refresh Patent Data Now",
+                    use_container_width=True,
+                    type="secondary",
+                    key="refresh_trigger",
+                ):
+                    with st.spinner("Starting the refresh job in BigQuery..."):
+                        ok, msg = trigger_refresh()
+                    if ok:
+                        st.toast(msg, icon="✅")
+                    else:
+                        st.toast(msg, icon="⚠️")
+                st.caption(
+                    "Triggers a BigQuery MERGE that pulls the latest US patents "
+                    "from the public Google Patents dataset and upserts them "
+                    "into the search index. The query scans tens of GB and "
+                    "typically costs a few dollars per run. The job runs "
+                    "asynchronously in BigQuery and finishes in a few minutes; "
+                    "reload this page after it completes to see the updated "
+                    "last-refresh timestamp."
+                )
 
 # ── Main Area ────────────────────────────────────────────────────────────
 

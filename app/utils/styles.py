@@ -131,6 +131,16 @@ def inject_custom_css():
         box-shadow: 0 2px 8px rgba(11, 61, 145, 0.25) !important;
     }
 
+    /* Streamlit wraps the button label in a nested <p> inside
+       [data-testid="stMarkdownContainer"] whose color rule wins over the
+       container's. Force white on the label markup explicitly. */
+    .stButton > button[kind="primary"] p,
+    .stFormSubmitButton > button p,
+    .stButton > button[kind="primary"] [data-testid="stMarkdownContainer"] p,
+    .stFormSubmitButton > button [data-testid="stMarkdownContainer"] p {
+        color: #FFFFFF !important;
+    }
+
     .stButton > button[kind="primary"]:hover,
     .stFormSubmitButton > button:hover {
         box-shadow: 0 6px 20px rgba(11, 61, 145, 0.35) !important;
@@ -520,6 +530,16 @@ def inject_custom_css():
         border-radius: 50%;
         display: inline-block;
     }
+
+    /* Score-tier sizing: bigger dot = better score. Mirrors the network
+       graph's size-by-score encoding (graph.py: 18 + score*32) so color-blind
+       users get a size hierarchy that reinforces the ordering. */
+    .legend-dot.tier-1 { width: 6px;  height: 6px;  }
+    .legend-dot.tier-2 { width: 8px;  height: 8px;  }
+    .legend-dot.tier-3 { width: 10px; height: 10px; }
+    .legend-dot.tier-4 { width: 12px; height: 12px; }
+    .legend-dot.tier-5 { width: 14px; height: 14px; }
+    .legend-dot.tier-6 { width: 16px; height: 16px; }
 
     .legend-triangle {
         width: 0;
