@@ -528,27 +528,26 @@ st.markdown(
 # ── AI summary (placeholder; filled by streaming block below the network) ─
 
 # Reserve the visual position now so the streamed content lands above the
-# results table when it arrives. The actual Gemini call happens after the
-# table, charts, and network graph render — see the streaming block near the
-# end of the script.
+# results table when it arrives. Render the expander immediately with a
+# "Generating analysis…" indicator so the panel shows continuous activity
+# while Gemini's first token is in flight (otherwise the user sees the
+# panel blank for 1–3s before text starts appearing).
 ai_placeholder = st.empty()
 
-# Show a shimmering skeleton in the AI panel slot until the streaming block
-# replaces it with the real expander. Without this the panel is invisible
-# during the table/chart render, which makes the eventual stream feel like a
-# layout shift instead of a planned reveal.
-ai_placeholder.markdown(
-    """
-    <div class="ai-skeleton">
-        <div class="ai-skeleton-label">AI Analysis (Gemini)</div>
-        <div class="ai-skeleton-bar long"></div>
-        <div class="ai-skeleton-bar medium"></div>
-        <div class="ai-skeleton-bar long"></div>
-        <div class="ai-skeleton-bar short"></div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+AI_THINKING_HTML = """
+<div class="ai-thinking">
+    <span class="ai-thinking-dots">
+        <span class="ai-thinking-dot"></span>
+        <span class="ai-thinking-dot"></span>
+        <span class="ai-thinking-dot"></span>
+    </span>
+    Generating analysis…
+</div>
+"""
+
+with ai_placeholder.container():
+    with st.expander("AI Analysis (Gemini)", expanded=True):
+        st.markdown(AI_THINKING_HTML, unsafe_allow_html=True)
 
 # ── Results table ────────────────────────────────────────────────────────
 

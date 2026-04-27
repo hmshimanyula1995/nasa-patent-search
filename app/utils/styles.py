@@ -206,6 +206,14 @@ def inject_custom_css():
         box-shadow: 0 0 0 3px rgba(16, 91, 216, 0.18);
     }
 
+    /* Hide Streamlit's "Press Enter to submit form" hint that overlays the
+       input on the right side. The form has a labeled submit button, so the
+       hint is redundant — and with our higher-contrast input fill it visually
+       clashes with the typed value. */
+    [data-testid="InputInstructions"] {
+        display: none !important;
+    }
+
     /* ── Slider ── */
     [data-testid="stSlider"] [role="slider"] {
         background-color: #0B3D91;
@@ -425,46 +433,38 @@ def inject_custom_css():
         padding: 6px 12px;
     }
 
-    /* ── AI summary skeleton (shown while results render before the stream) ── */
-    .ai-skeleton {
-        border: 1px solid #E1E8F2;
-        border-radius: 14px;
-        padding: 22px 26px;
-        background: #FFFFFF;
-        margin: 16px 0;
-    }
-
-    .ai-skeleton-label {
-        font-family: 'Inter', sans-serif;
-        font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 1.6px;
-        text-transform: uppercase;
+    /* ── AI summary "thinking" indicator (shown until the first stream
+       chunk arrives so users see continuous activity, never a blank). ── */
+    .ai-thinking {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 4px 0 8px;
         color: #5B616B;
-        margin-bottom: 16px;
+        font-family: 'Public Sans', sans-serif;
+        font-size: 14px;
+        font-style: italic;
     }
 
-    .ai-skeleton-bar {
-        height: 12px;
-        border-radius: 6px;
-        margin-bottom: 10px;
-        background: linear-gradient(
-            90deg,
-            #EEF2F8 0%,
-            #DCE4EF 50%,
-            #EEF2F8 100%
-        );
-        background-size: 200% 100%;
-        animation: ai-skeleton-shimmer 1.4s ease-in-out infinite;
+    .ai-thinking-dots {
+        display: inline-flex;
+        gap: 5px;
     }
 
-    .ai-skeleton-bar.short { width: 62%; }
-    .ai-skeleton-bar.medium { width: 84%; }
-    .ai-skeleton-bar.long { width: 96%; }
+    .ai-thinking-dot {
+        width: 8px;
+        height: 8px;
+        background: #105BD8;
+        border-radius: 50%;
+        animation: ai-thinking-bounce 1.3s ease-in-out infinite both;
+    }
 
-    @keyframes ai-skeleton-shimmer {
-        0%   { background-position: 200% 0; }
-        100% { background-position: -200% 0; }
+    .ai-thinking-dot:nth-child(2) { animation-delay: 0.16s; }
+    .ai-thinking-dot:nth-child(3) { animation-delay: 0.32s; }
+
+    @keyframes ai-thinking-bounce {
+        0%, 80%, 100% { opacity: 0.25; transform: scale(0.7); }
+        40%          { opacity: 1;    transform: scale(1); }
     }
 
     /* ── Header banner ── */
