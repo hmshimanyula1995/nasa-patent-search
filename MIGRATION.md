@@ -192,6 +192,34 @@ That value goes into GitHub as the `WIF_PROVIDER` secret.
 The application reads from a single BigQuery table. There are two ways to
 populate it.
 
+#### Dataset location: create it in the `US` multi-region
+
+Both options below require the `patent_research` dataset to be in the `US`
+multi-region. Create it with `--location=US`.
+
+The reason is BigQuery-internal: a single query cannot span two locations.
+The public `patents-public-data` dataset and the source table both live in
+`US`, so the destination dataset must too. Creating it in a single region
+such as `us-central1` fails the copy and the rebuild with a location
+mismatch.
+
+**This has nothing to do with the Cloud Run region, and the two do not need
+to match.** A Cloud Run service reaches BigQuery over the global
+`bigquery.googleapis.com` endpoint; the query job executes in the dataset's
+location and the results come back over HTTPS. The service's own region is
+not part of that decision, so a `us-central1` service querying a `US`
+dataset is a normal configuration, not a mismatch. The reference deployment
+runs exactly that pairing: Cloud Run `nasa-patent-search` in `us-central1`
+against `patent_research` in `US`. `US` also physically spans US data
+centres including `us-central1` (Iowa), so there is no meaningful latency or
+egress cost.
+
+The one case where this matters is a data-residency policy that pins storage
+to a single named region. `US` multi-region is not single-region
+`us-central1`, so if such a policy applies, raise it before building — the
+table then has to be staged in `US` and cross-region copied, which also
+changes how the refresh in A7 is wired.
+
 #### Option A: Copy the existing table from the source project
 
 If the team handing off the project still has the populated table, copy it
@@ -207,12 +235,6 @@ bq cp \
   grad-589-588:patent_research.us_patents_indexed \
   "$NASA_PROJECT_ID:patent_research.us_patents_indexed"
 ```
-
-The dataset must be in the `US` multi-region. The source table lives in
-`US`, and BigQuery cannot copy or join across locations — creating the
-dataset in a single region such as `us-central1` fails with a location
-mismatch. This is independent of the Cloud Run region, which stays
-`us-central1`.
 
 The vector index does not survive a copy; recreate it once the copy
 finishes:
