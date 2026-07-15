@@ -195,15 +195,24 @@ populate it.
 #### Option A: Copy the existing table from the source project
 
 If the team handing off the project still has the populated table, copy it
-directly. Server-side copy of the 50 GB table runs in a few minutes.
+directly. The table is 12,628,867 rows / ~43.5 GiB; the server-side copy
+runs in a few minutes and BigQuery does not charge for copy jobs. This
+requires `roles/bigquery.dataViewer` on the source project, granted by the
+handing-off team.
 
 ```bash
-bq mk --dataset --project_id="$NASA_PROJECT_ID" patent_research
+bq mk --dataset --location=US --project_id="$NASA_PROJECT_ID" patent_research
 
 bq cp \
   grad-589-588:patent_research.us_patents_indexed \
   "$NASA_PROJECT_ID:patent_research.us_patents_indexed"
 ```
+
+The dataset must be in the `US` multi-region. The source table lives in
+`US`, and BigQuery cannot copy or join across locations — creating the
+dataset in a single region such as `us-central1` fails with a location
+mismatch. This is independent of the Cloud Run region, which stays
+`us-central1`.
 
 The vector index does not survive a copy; recreate it once the copy
 finishes:
@@ -221,14 +230,23 @@ OPTIONS(
 
 #### Option B: Rebuild from the public Google Patents dataset
 
-If the source project is unavailable, rebuild from `patents-public-data`.
-The MERGE filters US patents from 2006 onward (about 12 million rows) and
+Every column the application uses comes from Google's public
+`patents-public-data` dataset, so the table can be rebuilt from scratch in
+any project with no access to the source project and no data hand-off. The
+query filters US patents from 2006 onward (about 12.6 million rows) and
 takes the embedding column from the public dataset. Embedding coverage is
 100% on US patents, so no rows are dropped because of missing embeddings.
 Patents filed before 2006 are intentionally excluded.
 
+**Cost and runtime.** The query scans ~305 GiB of the public dataset
+(measured via `bq query --dry_run`, 2026-07). At on-demand pricing that is
+roughly $2, and $0 if it fits inside the 1 TiB/month free tier. It
+typically completes in several minutes. Storage of the resulting table is
+billed normally thereafter. Confirm current rates against the BigQuery
+pricing page before quoting this to a budget owner.
+
 ```bash
-bq mk --dataset --project_id="$NASA_PROJECT_ID" patent_research
+bq mk --dataset --location=US --project_id="$NASA_PROJECT_ID" patent_research
 
 bq query --project_id="$NASA_PROJECT_ID" --use_legacy_sql=false '
 CREATE TABLE `'"$NASA_PROJECT_ID"'.patent_research.us_patents_indexed` AS
@@ -260,6 +278,30 @@ WHERE base.country_code = "US"
 ```
 
 Then create the vector index (same command as Option A).
+
+#### Verifying the table before moving on
+
+Whichever option you used, confirm the table is populated and the vector
+index has finished building before deploying. The index builds
+asynchronously and similarity search degrades to a brute-force scan until
+`coverage_percentage` reaches 100.
+
+```bash
+# Expect ~12.6 million rows.
+bq query --project_id="$NASA_PROJECT_ID" --use_legacy_sql=false \
+  'SELECT COUNT(*) AS row_count FROM `'"$NASA_PROJECT_ID"'.patent_research.us_patents_indexed`;'
+
+# Expect index_status = ACTIVE and coverage_percentage = 100.
+bq query --project_id="$NASA_PROJECT_ID" --use_legacy_sql=false \
+  'SELECT index_name, index_status, coverage_percentage
+   FROM `'"$NASA_PROJECT_ID"'.patent_research.INFORMATION_SCHEMA.VECTOR_INDEXES`;'
+```
+
+A `404 Dataset not found` from the running application means this section
+has not completed in the project named by `GOOGLE_CLOUD_PROJECT`. The
+application reads `patent_research.us_patents_indexed` by default; see the
+environment variable reference at the end of this guide to point it
+elsewhere.
 
 ### A7. Create the Scheduled Query that performs the refresh
 
