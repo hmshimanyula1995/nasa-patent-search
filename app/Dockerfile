@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 # Base image: official Python on Alpine, pinned by digest.
 #
 # Debian-based images (python:*-slim) carry critical/high CVEs in Essential
@@ -24,11 +22,11 @@ RUN apk upgrade --no-cache
 
 WORKDIR /build
 COPY requirements.txt .
+# The runtime image is immutable and has no package manager, so the
+# virtualenv's own pip is removed once the install is done.
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --upgrade pip \
     && /opt/venv/bin/pip install -r requirements.txt \
-    # The runtime image is immutable and has no package manager, so the
-    # virtualenv's own pip is not needed there either.
     && rm -rf /opt/venv/bin/pip* \
               /opt/venv/lib/python3.13/site-packages/pip \
               /opt/venv/lib/python3.13/site-packages/pip-*.dist-info
