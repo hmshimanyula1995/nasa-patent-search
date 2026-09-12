@@ -70,7 +70,7 @@ def test_stream_summary_targets_vertex_ai_with_configured_project_and_region(fak
     _stream()
     assert len(fake_genai.instances) == 1
     assert fake_genai.instances[0].kwargs == {
-        "vertexai": True, "project": "test-project", "location": "test-region",
+        "enterprise": True, "project": "test-project", "location": "test-region",
     }
 
 
@@ -112,6 +112,21 @@ def test_stream_summary_hides_client_construction_error(fake_genai, monkeypatch)
         raise RuntimeError("could not load credentials for projects/secret")
     monkeypatch.setattr("google.genai.Client", _boom)
     assert _stream() == [gc.SUMMARY_UNAVAILABLE_MESSAGE]
+
+
+def test_stream_summary_reports_unavailable_when_gemini_returns_no_text(fake_genai, caplog):
+    # A safety-blocked or empty response has candidates without text parts:
+    # google-genai returns None from .text instead of raising.
+    fake_genai.chunks = [_Chunk(None), _Chunk("")]
+    with caplog.at_level(logging.WARNING, logger="utils.gemini_client"):
+        chunks = _stream()
+    assert chunks == [gc.SUMMARY_UNAVAILABLE_MESSAGE]
+    assert "no text" in caplog.text.lower()
+
+
+def test_generate_summary_reports_unavailable_when_gemini_returns_no_text(fake_genai):
+    fake_genai.chunks = [_Chunk(None)]
+    assert gc.generate_summary("US-1-A1", "T", "A", "R") == gc.SUMMARY_UNAVAILABLE_MESSAGE
 
 
 def test_generate_summary_returns_full_text(fake_genai):

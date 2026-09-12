@@ -27,11 +27,12 @@ def _get_client():
     """One Google Gen AI client per process, pointed at Vertex AI.
 
     Uses Application Default Credentials: the runtime service account on
-    Cloud Run, or the local gcloud application-default login.
+    Cloud Run, or the local gcloud application-default login. `enterprise`
+    selects the Vertex AI backend (`vertexai=True` is the legacy spelling).
     """
     from google import genai
 
-    return genai.Client(vertexai=True, project=GCP_PROJECT, location=VERTEX_LOCATION)
+    return genai.Client(enterprise=True, project=GCP_PROJECT, location=VERTEX_LOCATION)
 
 
 DEFAULT_PROMPT = """You are a patent analyst at NASA's Technology Transfer Office.
@@ -139,6 +140,11 @@ def generate_summary(
         response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
         text = response.text or ""
         elapsed = time.time() - t0
+        if not text:
+            # No candidates or no text parts: a safety block or an empty
+            # completion. google-genai returns None here rather than raising.
+            logger.warning("Gemini returned no text after %.2fs", elapsed)
+            return SUMMARY_UNAVAILABLE_MESSAGE
         logger.info("Gemini response: %d chars in %.2fs", len(text), elapsed)
         return text
     except Exception as e:
@@ -180,6 +186,10 @@ def stream_summary(
                 total_chars += len(text)
                 yield text
         elapsed = time.time() - t0
+        if total_chars == 0:
+            logger.warning("Gemini stream returned no text after %.2fs", elapsed)
+            yield SUMMARY_UNAVAILABLE_MESSAGE
+            return
         logger.info("Gemini response: %d chars in %.2fs", total_chars, elapsed)
     except Exception as e:
         logger.error("Gemini streaming failed: %s", e)
