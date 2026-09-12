@@ -1,5 +1,7 @@
 from collections import Counter
 import pandas as pd
+
+from utils.values import to_list
 import plotly.graph_objects as go
 
 
@@ -41,21 +43,11 @@ CPC_LABELS = {
 }
 
 
-def _to_list(val) -> list:
-    if val is None:
-        return []
-    if isinstance(val, list):
-        return val
-    try:
-        return list(val)
-    except (TypeError, ValueError):
-        return []
-
 
 def _extract_names(results_df: pd.DataFrame, column: str) -> list[str]:
     names = []
     for _, row in results_df.iterrows():
-        items = _to_list(row.get(column))
+        items = to_list(row.get(column))
         for item in items:
             if isinstance(item, dict):
                 name = item.get("name", "")
@@ -131,7 +123,7 @@ def create_inventor_chart(results_df: pd.DataFrame, top_n: int = 10) -> go.Figur
 def create_cpc_chart(results_df: pd.DataFrame) -> go.Figure:
     letters = []
     for _, row in results_df.iterrows():
-        cpc = _to_list(row.get("cpc"))
+        cpc = to_list(row.get("cpc"))
         for entry in cpc:
             if isinstance(entry, dict):
                 code = entry.get("code", "")
@@ -143,7 +135,7 @@ def create_cpc_chart(results_df: pd.DataFrame) -> go.Figure:
     if not counts:
         return _empty_chart("No CPC data available")
 
-    labels = [f"{l} - {CPC_LABELS.get(l, l)}" for l, _ in counts]
+    labels = [f"{letter} - {CPC_LABELS.get(letter, letter)}" for letter, _ in counts]
     values = [v for _, v in counts]
     bar_colors = [COLORS[i % len(COLORS)] for i in range(len(counts))]
 

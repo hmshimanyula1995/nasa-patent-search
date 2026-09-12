@@ -3,6 +3,8 @@ import tempfile
 import pandas as pd
 from pyvis.network import Network
 
+from utils.values import to_list
+
 
 EDGE_COLORS = {
     "similar": "#105BD8",
@@ -35,16 +37,6 @@ PHYSICS_OPTIONS = """{
     }
 }"""
 
-
-def _to_list(val) -> list:
-    if val is None:
-        return []
-    if isinstance(val, list):
-        return val
-    try:
-        return list(val)
-    except (TypeError, ValueError):
-        return []
 
 
 def _score_color(score: float) -> str:
@@ -191,7 +183,7 @@ def build_network_html(
         for _, row in source_df.iterrows():
             pub = row["publication_number"]
 
-            citations = _to_list(row.get("citation"))
+            citations = to_list(row.get("citation"))
             if citations:
                 for cite in citations[:10]:
                     if isinstance(cite, dict):
@@ -205,7 +197,7 @@ def build_network_html(
                                 dashes=True,
                             )
 
-            cited_by = _to_list(row.get("cited_by"))
+            cited_by = to_list(row.get("cited_by"))
             if cited_by:
                 for cite in cited_by[:10]:
                     if isinstance(cite, dict):
@@ -219,7 +211,7 @@ def build_network_html(
                                 dashes=True,
                             )
 
-            parents = _to_list(row.get("parent"))
+            parents = to_list(row.get("parent"))
             if parents:
                 for parent in parents[:5]:
                     if isinstance(parent, dict):
@@ -232,7 +224,7 @@ def build_network_html(
                                 title="Parent",
                             )
 
-            children = _to_list(row.get("child"))
+            children = to_list(row.get("child"))
             if children:
                 for child in children[:5]:
                     if isinstance(child, dict):

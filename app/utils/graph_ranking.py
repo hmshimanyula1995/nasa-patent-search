@@ -10,28 +10,11 @@ import logging
 import networkx as nx
 import pandas as pd
 
+from utils.values import extract_pub_numbers
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-def _extract_pub_numbers(array_field: list | None) -> list[str]:
-    """Extract publication_number strings from BQ struct arrays."""
-    if array_field is None:
-        return []
-    if not isinstance(array_field, list):
-        try:
-            array_field = list(array_field)
-        except (TypeError, ValueError):
-            return []
-    pubs: list[str] = []
-    for item in array_field:
-        if isinstance(item, dict):
-            pub = item.get("publication_number", "")
-            if pub:
-                pubs.append(pub)
-        elif isinstance(item, str) and item:
-            pubs.append(item)
-    return pubs
 
 
 def build_citation_graph(
@@ -65,21 +48,21 @@ def build_citation_graph(
         pub = row["publication_number"]
 
         # This patent cites others -> edge from pub to cited
-        for cited in _extract_pub_numbers(row.get("citation")):
+        for cited in extract_pub_numbers(row.get("citation")):
             if cited in node_set and cited != pub:
                 G.add_edge(pub, cited, edge_type="cites")
 
         # This patent is cited by others -> edge from citing to pub
-        for citing in _extract_pub_numbers(row.get("cited_by")):
+        for citing in extract_pub_numbers(row.get("cited_by")):
             if citing in node_set and citing != pub:
                 G.add_edge(citing, pub, edge_type="cited_by")
 
         # Parent -> child relationship
-        for parent in _extract_pub_numbers(row.get("parent")):
+        for parent in extract_pub_numbers(row.get("parent")):
             if parent in node_set and parent != pub:
                 G.add_edge(parent, pub, edge_type="parent")
 
-        for child in _extract_pub_numbers(row.get("child")):
+        for child in extract_pub_numbers(row.get("child")):
             if child in node_set and child != pub:
                 G.add_edge(pub, child, edge_type="child")
 

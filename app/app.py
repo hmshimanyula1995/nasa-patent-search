@@ -32,7 +32,6 @@ from utils.graph_ranking import (
 )
 from utils.refresh import (
     AGING_DAYS,
-    COOLDOWN_DAYS,
     STALE_WARNING_DAYS,
     cooldown_remaining,
     days_since,
