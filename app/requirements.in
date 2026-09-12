@@ -1,0 +1,17 @@
+# Direct dependencies, pinned. requirements.txt is generated from this file and
+# pins the full transitive set; the container installs requirements.txt only.
+#
+# Regenerate after editing (run from the app/ directory):
+#   docker run --rm -v "$PWD:/app" -w /app python:3.13-alpine3.24 sh -c \
+#     "pip install -q pip-tools && pip-compile --strip-extras -o requirements.txt requirements.in"
+streamlit==1.63.0
+google-cloud-bigquery==3.45.0
+google-cloud-bigquery-datatransfer==3.23.0
+google-genai==2.23.0
+db-dtypes==1.7.1
+pandas==3.0.5
+numpy==2.5.3
+scipy==1.18.1
+plotly==7.0.0
+pyvis==0.3.2
+networkx==3.6.1
