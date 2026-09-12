@@ -22,15 +22,18 @@ class _FakeModels:
         self.chunks = chunks
         self.error = error
         self.calls = []
+        self.configs = []
 
-    def generate_content_stream(self, *, model, contents):
+    def generate_content_stream(self, *, model, contents, config=None):
         self.calls.append(("stream", model, contents))
+        self.configs.append(config)
         if self.error:
             raise self.error
         return iter(self.chunks)
 
-    def generate_content(self, *, model, contents):
+    def generate_content(self, *, model, contents, config=None):
         self.calls.append(("sync", model, contents))
+        self.configs.append(config)
         if self.error:
             raise self.error
         return _Chunk("".join(c.text or "" for c in self.chunks))
@@ -84,6 +87,16 @@ def test_stream_summary_sends_configured_model_and_rendered_prompt(fake_genai):
     assert kind == "stream"
     assert model == "gemini-test-model"
     assert "US-1-A1" in contents and "THE RESULTS" in contents
+
+
+def test_requests_disable_automatic_function_calling(fake_genai):
+    # No tools are passed, and google-genai logs a warning on every streamed
+    # request unless automatic function calling is explicitly disabled.
+    _stream()
+    gc.generate_summary("US-1-A1", "T", "A", "R")
+    configs = fake_genai.instances[0].models.configs
+    assert len(configs) == 2
+    assert all(c.automatic_function_calling.disable is True for c in configs)
 
 
 def test_stream_summary_uses_supplied_prompt_template(fake_genai):

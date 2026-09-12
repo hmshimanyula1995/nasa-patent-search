@@ -50,6 +50,26 @@ def test_compute_ppr_returns_empty_without_edges():
     assert gr.compute_ppr(G, "US-1-A1") == {}
 
 
+def test_compute_ppr_returns_empty_when_query_has_no_outgoing_edges():
+    # Seen on real data: many patents cite only patents that are not in the
+    # index, so the query node has in-edges but no out-edges. Personalized
+    # PageRank then keeps all mass on the query (score 1.0) and every other
+    # node gets floating-point residue, which the UI would show as 0.0%
+    # "structurally important" patents. Treat that as "no PPR available".
+    df = pd.DataFrame(
+        {
+            "publication_number": ["US-1-A1", "US-2-A1", "US-3-A1"],
+            "citation": [_arr("US-99-A1"), _arr("US-1-A1"), _arr("US-2-A1")],
+            "cited_by": [None, None, None],
+            "parent": [None, None, None],
+            "child": [None, None, None],
+        }
+    )
+    G = gr.build_citation_graph(df, None, "US-1-A1")
+    assert G.number_of_edges() == 2 and G.out_degree("US-1-A1") == 0
+    assert gr.compute_ppr(G, "US-1-A1") == {}
+
+
 def test_compute_ppr_seeds_from_query_patent(results):
     G = gr.build_citation_graph(results, None, "US-1-A1")
     scores = gr.compute_ppr(G, "US-1-A1")

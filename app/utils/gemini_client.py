@@ -22,6 +22,19 @@ SUMMARY_UNAVAILABLE_MESSAGE = (
 )
 
 
+def _generation_config():
+    """Request config shared by both call paths.
+
+    No tools are passed, so automatic function calling can never trigger;
+    disabling it explicitly stops google-genai logging a warning per request.
+    """
+    from google.genai import types
+
+    return types.GenerateContentConfig(
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+    )
+
+
 @st.cache_resource(show_spinner=False)
 def _get_client():
     """One Google Gen AI client per process, pointed at Vertex AI.
@@ -137,7 +150,9 @@ def generate_summary(
     try:
         t0 = time.time()
         client = _get_client()
-        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL, contents=prompt, config=_generation_config(),
+        )
         text = response.text or ""
         elapsed = time.time() - t0
         if not text:
@@ -178,7 +193,9 @@ def stream_summary(
     try:
         t0 = time.time()
         client = _get_client()
-        stream = client.models.generate_content_stream(model=GEMINI_MODEL, contents=prompt)
+        stream = client.models.generate_content_stream(
+            model=GEMINI_MODEL, contents=prompt, config=_generation_config(),
+        )
         total_chars = 0
         for chunk in stream:
             text = getattr(chunk, "text", None)

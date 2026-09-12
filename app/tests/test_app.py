@@ -120,7 +120,7 @@ class _FakeGenAI:
         self.kwargs = kwargs
         self.models = self
 
-    def generate_content_stream(self, *, model, contents):
+    def generate_content_stream(self, *, model, contents, config=None):
         return iter([_Chunk("## Technology Landscape\n"), _Chunk("Fake analysis body.")])
 
 
@@ -197,3 +197,14 @@ def test_unknown_patent_shows_friendly_error_and_stops(fakes):
 
 def test_app_uses_no_deprecated_streamlit_width_flag():
     assert "use_container_width" not in Path(APP).read_text()
+
+
+def test_network_graph_is_rendered_with_st_iframe(fakes):
+    # st.components.v1.html is scheduled for removal; st.iframe is the
+    # replacement and embeds an HTML string directly.
+    assert "components.html" not in Path(APP).read_text()
+    at = _run_search("US-1-A1")
+    assert not at.exception
+    frames = at.get("iframe")
+    assert len(frames) == 1
+    assert "US-2-A1" in frames[0].proto.srcdoc

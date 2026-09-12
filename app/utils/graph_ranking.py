@@ -95,6 +95,18 @@ def compute_ppr(
     if query_patent not in G:
         G.add_node(query_patent)
 
+    # With no outgoing edges from the seed, personalized PageRank keeps all
+    # mass on the query patent (score 1.0) and every other node receives only
+    # floating-point residue. That is not a ranking signal, so report PPR as
+    # unavailable and let the caller fall back to text similarity. Common on
+    # real data: a patent's citations often predate the indexed corpus.
+    if G.out_degree(query_patent) == 0:
+        logger.info(
+            "PPR skipped: query patent %s has no outgoing citation edges in the index",
+            query_patent,
+        )
+        return {}
+
     personalization = {node: 0.0 for node in G.nodes()}
     personalization[query_patent] = 1.0
 

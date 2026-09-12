@@ -435,7 +435,7 @@ def compute_ppr(G, query_patent, alpha=0.85):
 
 `alpha=0.85` means at each step there's a 15% chance of teleporting back to the query patent. This ensures scores are anchored to the query rather than converging to generic hubs in the patent corpus.
 
-If the graph has no edges (isolated patent with no citations) or PageRank fails to converge, the function returns an empty dict and the system falls back to cosine-only ranking.
+If the graph has no edges, if the query patent has no outgoing citation edges in the index (its citations predate the indexed corpus, which is common), or if PageRank fails to converge, the function returns an empty dict and the system falls back to cosine-only ranking.
 
 ---
 
@@ -801,7 +801,7 @@ The system is designed so that no failure makes it worse than a basic cosine sim
 | Patent number normalization fails | Error with suggestion to use full publication format, execution stops |
 | Patent not found in BigQuery | Error message displayed, execution stops |
 | Citation expansion fails | PPR pipeline is skipped, cosine-only ranking |
-| PPR computation fails (no edges, no convergence) | Returns empty scores, cosine-only ranking |
+| PPR computation fails (no edges, query has no outgoing edges, no convergence) | Returns empty scores, cosine-only ranking |
 | No expanded neighbors found | "Structurally Important" section is hidden |
 | Gemini call fails | Error message shown in summary section |
 | BigQuery vector index unavailable | Query degrades to full table scan (slower but still works) |
@@ -850,7 +850,7 @@ The `ppr_available` flag controls all downstream behavior: which Gemini prompt t
 | Citation neighbor fetch | INFO | `Fetching 127 citation neighbors` |
 | Graph construction | INFO | `Citation graph built: 42 nodes, 89 edges` |
 | PPR computation | INFO | `PPR computed: 42 scores, top 3: [('US-...', '0.142')]` |
-| PPR fallback | INFO/ERROR | `PPR skipped: graph has no edges` or `PPR pipeline failed` |
+| PPR fallback | INFO/ERROR | `PPR skipped: graph has no edges`, `PPR skipped: query patent ... has no outgoing citation edges`, or `PPR pipeline failed` |
 | Gemini request | INFO | `Gemini request: model=gemini-2.5-flash, prompt_length=4521 chars` |
 | Gemini response | INFO | `Gemini response: 1823 chars in 2.31s` |
 | Total pipeline | INFO | `Analysis complete: 15 results, ppr=True, total=6.82s` |

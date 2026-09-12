@@ -6,7 +6,6 @@ import zipfile
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 
 from utils.styles import inject_custom_css, NASA_LOGO_URL
 from utils.bigquery_client import (
@@ -673,7 +672,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-components.html(graph_html, height=580, scrolling=False)
+# st.iframe embeds the HTML string directly (st.components.v1.html is
+# scheduled for removal).
+st.iframe(graph_html, height=580)
 
 # ── Stream AI summary into the placeholder reserved above ────────────────
 
