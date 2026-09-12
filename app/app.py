@@ -88,7 +88,7 @@ with st.sidebar:
         )
         submitted = st.form_submit_button(
             "Search",
-            use_container_width=True,
+            width="stretch",
         )
 
     if submitted and patent_number:
@@ -187,7 +187,7 @@ with st.sidebar:
             st.button(
                 "Refresh in progress…",
                 disabled=True,
-                use_container_width=True,
+                width="stretch",
                 key="refresh_running",
             )
             st.caption("Check back in a minute.")
@@ -200,14 +200,14 @@ with st.sidebar:
                 st.button(
                     f"Manual refresh available in {cooldown} {day_word}",
                     disabled=True,
-                    use_container_width=True,
+                    width="stretch",
                     key="refresh_disabled",
                 )
                 st.caption("Manual refreshes are limited to once a week.")
             else:
                 if st.button(
                     "Refresh Patent Data Now",
-                    use_container_width=True,
+                    width="stretch",
                     type="secondary",
                     key="refresh_trigger",
                 ):
@@ -596,7 +596,7 @@ display_df.insert(0, "rank", range(1, len(display_df) + 1))
 st.dataframe(
     display_df,
     column_config=col_config,
-    use_container_width=True,
+    width="stretch",
     hide_index=True,
     height=min(400, 35 * len(display_df) + 38),
 )
@@ -642,7 +642,7 @@ if ppr_available and expanded_df is not None and not expanded_df.empty:
                     max_value=100,
                 ),
             },
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             height=min(400, 35 * len(struct_display) + 38),
         )
@@ -658,11 +658,11 @@ st.markdown(
 
 c1, c2 = st.columns(2)
 with c1:
-    st.plotly_chart(fig_assignees, use_container_width=True, key="assignees")
+    st.plotly_chart(fig_assignees, width="stretch", key="assignees")
 with c2:
-    st.plotly_chart(fig_inventors, use_container_width=True, key="inventors")
+    st.plotly_chart(fig_inventors, width="stretch", key="inventors")
 
-st.plotly_chart(fig_cpc, use_container_width=True, key="cpc")
+st.plotly_chart(fig_cpc, width="stretch", key="cpc")
 
 # ── Network graph ────────────────────────────────────────────────────────
 
@@ -724,7 +724,7 @@ st.download_button(
     data=buf,
     file_name=f"patent_search_{pn}.zip",
     mime="application/zip",
-    use_container_width=True,
+    width="stretch",
 )
 
 # ── Footer ───────────────────────────────────────────────────────────────
