@@ -7,3 +7,12 @@ __pycache__/
 .DS_Store
 *.log
 .venv/
+# Test and lint tooling stays out of the runtime image.
+tests/
+pytest.ini
+requirements-dev.txt
+requirements.in
+.pytest_cache/
+.ruff_cache/
+Dockerfile
+.dockerignore
