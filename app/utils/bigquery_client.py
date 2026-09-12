@@ -8,6 +8,7 @@ import streamlit as st
 from google.cloud import bigquery
 
 from utils.config import get_project
+from utils.values import extract_pub_numbers
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -65,7 +66,8 @@ WHERE publication_number IN UNNEST(@neighbor_ids)
 
 
 def format_date(date_int) -> str:
-    if not date_int or pd.isna(date_int):
+    # pd.isna first: BigQuery returns nullable Int64, and bool(pd.NA) raises.
+    if date_int is None or pd.isna(date_int) or not date_int:
         return "N/A"
     s = str(int(date_int))
     if len(s) == 8:
@@ -232,17 +234,8 @@ def extract_citation_neighbors(
 
     for _, row in results_df.iterrows():
         for col in ("citation", "cited_by", "parent", "child"):
-            raw = row.get(col)
-            if raw is None:
-                continue
-            items = raw if isinstance(raw, list) else []
-            for item in items:
-                pub = ""
-                if isinstance(item, dict):
-                    pub = item.get("publication_number", "")
-                elif isinstance(item, str):
-                    pub = item
-                if pub and pub not in existing:
+            for pub in extract_pub_numbers(row.get(col)):
+                if pub not in existing:
                     neighbors.add(pub)
                     if len(neighbors) >= max_neighbors:
                         return list(neighbors)
