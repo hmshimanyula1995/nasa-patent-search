@@ -28,8 +28,7 @@ def test_build_citation_graph_adds_edges_only_between_known_nodes(results):
     G = gr.build_citation_graph(results, None, "US-1-A1")
     assert set(G.nodes()) == {"US-1-A1", "US-2-A1", "US-3-A1"}
     assert G.has_edge("US-1-A1", "US-2-A1")
-    assert G.has_edge("US-2-A1", "US-3-A1")
-    assert G.has_edge("US-2-A1", "US-3-A1")
+    assert G.has_edge("US-2-A1", "US-3-A1")  # from row 2's citation and row 3's parent
     assert not G.has_node("US-9-A1")
     assert not G.has_edge("US-1-A1", "US-1-A1")
 

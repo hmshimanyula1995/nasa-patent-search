@@ -56,8 +56,8 @@ def test_build_network_html_handles_missing_score_column():
 
 
 def test_build_network_html_leaves_no_temp_file(tmp_path, monkeypatch):
-    monkeypatch.setenv("TMPDIR", str(tmp_path))
     import tempfile
-    tempfile.tempdir = None
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+    monkeypatch.setattr(tempfile, "tempdir", None)  # re-read TMPDIR; restored after the test
     graph.build_network_html(_results(), "US-1-A1")
     assert list(tmp_path.glob("patent_graph_*")) == []

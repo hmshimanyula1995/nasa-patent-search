@@ -4,19 +4,21 @@
 # packages such as perl-base and util-linux that Debian marks "no fix", so no
 # Debian image can pass a critical/high vulnerability scan. Alpine patches its
 # base packages promptly, and this app needs nothing from the OS beyond libc,
-# OpenSSL and the Python runtime. Every Python dependency ships musl wheels or
-# is pure Python.
+# OpenSSL and the Python runtime. Every compiled dependency ships musl wheels;
+# the two that do not (watchdog, google-crc32c) fall back to pure Python.
 #
-# Dependabot proposes digest bumps weekly (.github/dependabot.yml). Merging one
-# and running the deploy workflow is how OS-level fixes reach production.
-ARG BASE_IMAGE=python:3.13-alpine3.24@sha256:7415fbc3c9e4979cc717d92377ab2bc7b2b4a2af1ac03cc52b5f3f88efedaf3a
+# Dependabot proposes digest bumps weekly (.github/dependabot.yml) and updates
+# both FROM lines in one PR. It only recognises literal FROM lines, so the
+# image must not be routed through an ARG. Merging the PR and running the
+# deploy workflow is how OS-level fixes reach production.
 
 # ---- build stage: install the pinned dependency set into a virtualenv -------
-FROM ${BASE_IMAGE} AS builder
+FROM python:3.13-alpine3.24@sha256:7415fbc3c9e4979cc717d92377ab2bc7b2b4a2af1ac03cc52b5f3f88efedaf3a AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_ROOT_USER_ACTION=ignore
+    PIP_ROOT_USER_ACTION=ignore \
+    CRC32C_PURE_PYTHON=1
 
 RUN apk upgrade --no-cache
 
@@ -32,7 +34,7 @@ RUN python -m venv /opt/venv \
               /opt/venv/lib/python3.13/site-packages/pip-*.dist-info
 
 # ---- runtime stage: no pip, no compilers, unprivileged user -----------------
-FROM ${BASE_IMAGE}
+FROM python:3.13-alpine3.24@sha256:7415fbc3c9e4979cc717d92377ab2bc7b2b4a2af1ac03cc52b5f3f88efedaf3a
 
 # Apply Alpine security updates published since the base was built. Then remove
 # pip and the wheel bundled for `python -m ensurepip`: nothing installs packages

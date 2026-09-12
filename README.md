@@ -503,10 +503,10 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 @st.cache_resource
 def _get_client():
     from google import genai
-    return genai.Client(vertexai=True, project=GCP_PROJECT, location=VERTEX_LOCATION)
+    return genai.Client(enterprise=True, project=GCP_PROJECT, location=VERTEX_LOCATION)
 ```
 
-The client is the Google Gen AI SDK pointed at Vertex AI (the older `vertexai.generative_models` module reached its shutdown date on 2026-06-24). It is lazy-loaded, cached for the process lifetime, and authenticates with Application Default Credentials, so the Cloud Run runtime service account needs only `roles/aiplatform.user` as before. Calls go through `client.models.generate_content_stream(model=GEMINI_MODEL, contents=prompt)`; on any failure the UI shows a fixed message and the raw error goes to the log.
+The client is the Google Gen AI SDK pointed at Vertex AI via `enterprise=True` (the older `vertexai.generative_models` module reached its shutdown date on 2026-06-24). An empty or safety-blocked response is treated the same way as an error. It is lazy-loaded, cached for the process lifetime, and authenticates with Application Default Credentials, so the Cloud Run runtime service account needs only `roles/aiplatform.user` as before. Calls go through `client.models.generate_content_stream(model=GEMINI_MODEL, contents=prompt)`; on any failure the UI shows a fixed message and the raw error goes to the log.
 
 **Building the graph-aware context:**
 
@@ -865,7 +865,9 @@ On Cloud Run, these logs are automatically collected by Cloud Logging and can be
 
 Alpine rather than Debian slim is deliberate: Debian's Essential packages (perl-base, util-linux and others) carry critical/high CVEs that Debian marks "no fix", so no Debian-based image passes a critical/high scan. The Alpine image scans clean with the full dependency set installed.
 
-**Keeping it clean.** `.github/workflows/ci.yml` runs on every pull request, on pushes to `main`, and weekly: it runs the tests, builds the image, checks that Streamlit comes up, and fails on any fixable critical/high vulnerability (Trivy). `.github/dependabot.yml` opens weekly pull requests for the base image digest, the pinned Python packages, and the GitHub Actions. The operating rhythm is: merge the Dependabot PR, then run the deploy workflow.
+**What is pinned.** The base image digest and every Python package are pinned, so two builds of one commit install the same software. The one thing that floats is Alpine's own patch level: `apk upgrade` runs at build time so security fixes published after the base image was cut are applied, which is deliberate.
+
+**Keeping it clean.** `.github/workflows/ci.yml` runs on every pull request, on pushes to `main`, and weekly: it runs the tests on the runner and again inside the Alpine build stage, builds the image, imports the app inside it, checks that Streamlit comes up, and fails on any fixable critical/high vulnerability (Trivy). `.github/dependabot.yml` opens weekly pull requests for the base image digest, the pinned Python packages, and the GitHub Actions. The operating rhythm is: merge the Dependabot PR, then run the deploy workflow.
 
 **Two deploy paths.** The repository ships with a manual GitHub Actions workflow (`.github/workflows/deploy.yml`) that authenticates to GCP via Workload Identity Federation (no service account JSON keys) and runs `gcloud run deploy --source ./app`. This is the production path NASA will use after wiring up the WIF setup described in `MIGRATION.md`. For internal team deploys to the existing `grad-589-588` project, the same `gcloud run deploy --source ./app` command works locally.
 

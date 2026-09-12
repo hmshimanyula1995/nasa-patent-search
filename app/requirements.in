@@ -4,6 +4,8 @@
 # Regenerate after editing (run from the app/ directory):
 #   docker run --rm -v "$PWD:/app" -w /app python:3.13-alpine3.24 sh -c \
 #     "pip install -q pip-tools && pip-compile --strip-extras -o requirements.txt requirements.in"
+# The command line pip-compile records in the requirements.txt header is its
+# own normalised form and is not meant to be run by hand; use the one above.
 streamlit==1.63.0
 google-cloud-bigquery==3.45.0
 google-cloud-bigquery-datatransfer==3.23.0

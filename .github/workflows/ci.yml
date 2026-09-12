@@ -1,8 +1,9 @@
 name: CI
 
-# Runs the test suite, builds the container image, checks that it starts, and
-# fails on any fixable critical/high vulnerability. The weekly schedule makes
-# newly published CVEs surface as a failed run even when nothing was committed.
+# Runs the test suite, builds the container image, proves the app imports and
+# starts inside it, and fails on any fixable critical/high vulnerability. The
+# weekly schedule makes newly published CVEs surface as a failed run even when
+# nothing was committed.
 on:
   pull_request:
   push:
@@ -40,13 +41,29 @@ jobs:
         run: pytest -q
 
   image:
-    name: Build, start and scan the image
+    name: Build, verify and scan the image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build image
+      - name: Build runtime image
         run: docker build -t nasa-patent-search:ci ./app
+
+      - name: Run the test suite inside the Alpine build stage
+        # Same musl wheels as production. The build stage keeps a system pip,
+        # so pytest can be added without touching the pinned virtualenv.
+        run: |
+          docker build --target builder -t nasa-patent-search:builder ./app
+          docker run --rm \
+            -v "$PWD/app:/src:ro" -w /src \
+            -e GOOGLE_CLOUD_PROJECT=ci -e PYTHONDONTWRITEBYTECODE=1 -e PIP_ROOT_USER_ACTION=ignore \
+            nasa-patent-search:builder \
+            sh -c 'pip install -q --target /tmp/pt pytest==8.4.2 && PYTHONPATH=/tmp/pt /opt/venv/bin/python -m pytest -q -p no:cacheprovider'
+
+      - name: Import the app inside the runtime image
+        run: |
+          docker run --rm --entrypoint python -e GOOGLE_CLOUD_PROJECT=ci nasa-patent-search:ci -c \
+            "import utils.bigquery_client, utils.gemini_client, utils.graph_ranking, utils.graph, utils.charts, utils.refresh, scipy.sparse, pyarrow; print('imports ok')"
 
       - name: Start container and wait for the Streamlit health endpoint
         run: |
@@ -63,16 +80,19 @@ jobs:
           exit 1
 
       - name: Fail on fixable critical or high vulnerabilities
-        run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:0.74.0 image \
-            --scanners vuln --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 \
-            nasa-patent-search:ci
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: nasa-patent-search:ci
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
 
       - name: Report every critical or high finding, fixable or not
         if: always()
-        run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:0.74.0 image \
-            --scanners vuln --severity CRITICAL,HIGH --exit-code 0 \
-            nasa-patent-search:ci
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: nasa-patent-search:ci
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          exit-code: '0'
