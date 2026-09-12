@@ -129,7 +129,7 @@ app/
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.13
 - Google Cloud SDK (`gcloud`) with access to project `grad-589-588`
 - Application Default Credentials configured
 
@@ -145,6 +145,10 @@ pip install -r requirements.txt
 
 # Run
 streamlit run app.py
+
+# Tests and lint (no GCP credentials needed)
+pip install -r requirements-dev.txt
+pytest -q && ruff check .
 ```
 
 The app will open at `http://localhost:8501`.
@@ -497,14 +501,12 @@ VERTEX_LOCATION = os.getenv("VERTEX_AI_LOCATION", "us-central1")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 @st.cache_resource
-def _get_model():
-    import vertexai
-    from vertexai.generative_models import GenerativeModel
-    vertexai.init(project=GCP_PROJECT, location=VERTEX_LOCATION)
-    return GenerativeModel(GEMINI_MODEL)
+def _get_client():
+    from google import genai
+    return genai.Client(vertexai=True, project=GCP_PROJECT, location=VERTEX_LOCATION)
 ```
 
-The model is lazy-loaded and cached for the process lifetime.
+The client is the Google Gen AI SDK pointed at Vertex AI (the older `vertexai.generative_models` module reached its shutdown date on 2026-06-24). It is lazy-loaded, cached for the process lifetime, and authenticates with Application Default Credentials, so the Cloud Run runtime service account needs only `roles/aiplatform.user` as before. Calls go through `client.models.generate_content_stream(model=GEMINI_MODEL, contents=prompt)`; on any failure the UI shows a fixed message and the raw error goes to the log.
 
 **Building the graph-aware context:**
 
@@ -859,20 +861,11 @@ On Cloud Run, these logs are automatically collected by Cloud Logging and can be
 
 ## 17. Deployment
 
-**Container:** `python:3.11-slim` base image. The Dockerfile is minimal:
+**Container:** `python:3.13-alpine`, pinned by digest, built in two stages (`app/Dockerfile`). The build stage installs the pinned `requirements.txt` into a virtualenv; the runtime stage copies that virtualenv onto a fresh base, applies Alpine security updates, removes pip, and runs Streamlit as an unprivileged user. No `HEALTHCHECK` is declared because Cloud Run ignores it and probes the port itself.
 
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD curl -f http://localhost:8080/_stcore/health || exit 1
-ENTRYPOINT ["streamlit", "run", "app.py", \
-    "--server.port=8080", "--server.address=0.0.0.0"]
-```
+Alpine rather than Debian slim is deliberate: Debian's Essential packages (perl-base, util-linux and others) carry critical/high CVEs that Debian marks "no fix", so no Debian-based image passes a critical/high scan. The Alpine image scans clean with the full dependency set installed.
+
+**Keeping it clean.** `.github/workflows/ci.yml` runs on every pull request, on pushes to `main`, and weekly: it runs the tests, builds the image, checks that Streamlit comes up, and fails on any fixable critical/high vulnerability (Trivy). `.github/dependabot.yml` opens weekly pull requests for the base image digest, the pinned Python packages, and the GitHub Actions. The operating rhythm is: merge the Dependabot PR, then run the deploy workflow.
 
 **Two deploy paths.** The repository ships with a manual GitHub Actions workflow (`.github/workflows/deploy.yml`) that authenticates to GCP via Workload Identity Federation (no service account JSON keys) and runs `gcloud run deploy --source ./app`. This is the production path NASA will use after wiring up the WIF setup described in `MIGRATION.md`. For internal team deploys to the existing `grad-589-588` project, the same `gcloud run deploy --source ./app` command works locally.
 
@@ -983,17 +976,22 @@ No secrets are hardcoded. Authentication uses Application Default Credentials (A
 
 ## 22. Dependencies
 
+Direct dependencies live in `app/requirements.in`, pinned to exact versions:
+
 ```
-streamlit>=1.38.0                          # UI framework
-google-cloud-bigquery>=3.25.0              # BigQuery client (vector search, citation expansion)
-google-cloud-bigquery-datatransfer>=3.13.0 # Triggers manual runs of the refresh Scheduled Query
-google-cloud-aiplatform>=1.60.0            # Vertex AI + Gemini
-db-dtypes>=1.2.0                           # BigQuery date/time types
-pandas>=2.2.0                              # DataFrames
-plotly>=5.22.0                             # Chart rendering
-pyvis>=0.3.2                               # Network graph HTML export
-networkx>=3.3                              # PageRank computation
+streamlit                          # UI framework
+google-cloud-bigquery              # BigQuery client (vector search, citation expansion)
+google-cloud-bigquery-datatransfer # Triggers manual runs of the refresh Scheduled Query
+google-genai                       # Gemini on Vertex AI
+db-dtypes                          # BigQuery date/time types
+pandas, numpy                      # DataFrames
+scipy                              # Required by networkx.pagerank
+plotly                             # Chart rendering
+pyvis                              # Network graph HTML export
+networkx                           # PageRank computation
 ```
+
+`app/requirements.txt` is generated from it with `pip-compile` and pins the full transitive set, so every build of a commit installs the same packages. To change a version, edit `requirements.in` and regenerate with the command in that file's header. Dependabot proposes updates weekly.
 
 Install: `pip install -r requirements.txt`
 
