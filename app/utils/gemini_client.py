@@ -15,13 +15,23 @@ VERTEX_LOCATION = os.getenv("VERTEX_AI_LOCATION", "us-central1")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 
-@st.cache_resource(show_spinner=False)
-def _get_model():
-    import vertexai
-    from vertexai.generative_models import GenerativeModel
+# Shown to the user when Gemini fails. The raw error goes to the log only.
+SUMMARY_UNAVAILABLE_MESSAGE = (
+    "The AI analysis could not be generated right now. "
+    "The search results above are unaffected."
+)
 
-    vertexai.init(project=GCP_PROJECT, location=VERTEX_LOCATION)
-    return GenerativeModel(GEMINI_MODEL)
+
+@st.cache_resource(show_spinner=False)
+def _get_client():
+    """One Google Gen AI client per process, pointed at Vertex AI.
+
+    Uses Application Default Credentials: the runtime service account on
+    Cloud Run, or the local gcloud application-default login.
+    """
+    from google import genai
+
+    return genai.Client(vertexai=True, project=GCP_PROJECT, location=VERTEX_LOCATION)
 
 
 DEFAULT_PROMPT = """You are a patent analyst at NASA's Technology Transfer Office.
@@ -114,8 +124,6 @@ def generate_summary(
     results_json: str,
     prompt_template: str | None = None,
 ) -> str:
-    model = _get_model()
-
     prompt = _build_prompt(
         query_pub, query_title, query_abstract, results_json, prompt_template,
     )
@@ -127,13 +135,15 @@ def generate_summary(
 
     try:
         t0 = time.time()
-        response = model.generate_content(prompt)
+        client = _get_client()
+        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+        text = response.text or ""
         elapsed = time.time() - t0
-        logger.info("Gemini response: %d chars in %.2fs", len(response.text), elapsed)
-        return response.text
+        logger.info("Gemini response: %d chars in %.2fs", len(text), elapsed)
+        return text
     except Exception as e:
         logger.error("Gemini generation failed: %s", e)
-        return f"Summary generation failed: {e}"
+        return SUMMARY_UNAVAILABLE_MESSAGE
 
 
 def stream_summary(
@@ -145,13 +155,11 @@ def stream_summary(
 ) -> Iterator[str]:
     """Streaming counterpart to generate_summary().
 
-    Yields text chunks as Gemini produces them. Not cached — callers should
+    Yields text chunks as Gemini produces them. Not cached: callers should
     stash the joined result in st.session_state if they want to skip re-streaming
     on rerun. Mirrors generate_summary()'s error contract: on exception, yields
-    a single sanitized message chunk and logs the raw error.
+    SUMMARY_UNAVAILABLE_MESSAGE as a single chunk and logs the raw error.
     """
-    model = _get_model()
-
     prompt = _build_prompt(
         query_pub, query_title, query_abstract, results_json, prompt_template,
     )
@@ -163,9 +171,10 @@ def stream_summary(
 
     try:
         t0 = time.time()
-        response = model.generate_content(prompt, stream=True)
+        client = _get_client()
+        stream = client.models.generate_content_stream(model=GEMINI_MODEL, contents=prompt)
         total_chars = 0
-        for chunk in response:
+        for chunk in stream:
             text = getattr(chunk, "text", None)
             if text:
                 total_chars += len(text)
@@ -174,7 +183,7 @@ def stream_summary(
         logger.info("Gemini response: %d chars in %.2fs", total_chars, elapsed)
     except Exception as e:
         logger.error("Gemini streaming failed: %s", e)
-        yield f"Summary generation failed: {e}"
+        yield SUMMARY_UNAVAILABLE_MESSAGE
 
 
 def build_results_text(results_df) -> str:
