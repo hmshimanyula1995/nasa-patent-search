@@ -130,6 +130,15 @@ with st.sidebar:
         index=0,
         help="Controls result sorting and graph node coloring.",
     )
+    undirected_graph = st.toggle(
+        "Undirected citation graph",
+        value=False,
+        help=(
+            "Off: graph importance flows only along the direction a patent "
+            "cites. On: it also flows along cited-by links, so patents whose "
+            "own citations are not in the index still get a graph ranking."
+        ),
+    )
 
     # ── Patent Data Refresh ─────────────────────────────────────────────
     st.markdown("---")
@@ -353,7 +362,7 @@ with st.status("Analyzing patents...", expanded=True) as status:
 
         st.write("Computing graph ranking (PageRank)...")
         G = build_citation_graph(results_df, expanded_df, pn)
-        ppr_scores = compute_ppr(G, pn)
+        ppr_scores = compute_ppr(G, pn, undirected=undirected_graph)
 
         if ppr_scores:
             search_results = blend_scores(search_results, ppr_scores)
@@ -541,10 +550,11 @@ with ai_placeholder.container():
 # ── Results table ────────────────────────────────────────────────────────
 
 sort_label = ranking_mode if ppr_available else "Text Similarity"
+graph_label = " &middot; Undirected citation graph" if ppr_available and undirected_graph else ""
 st.markdown(
     '<div class="section-header">'
     '<span class="section-title">Similar Patents</span>'
-    f'<span class="section-subtitle">{len(search_results)} results &middot; Sorted by {sort_label}</span>'
+    f'<span class="section-subtitle">{len(search_results)} results &middot; Sorted by {sort_label}{graph_label}</span>'
     "</div>",
     unsafe_allow_html=True,
 )
@@ -683,7 +693,7 @@ st.iframe(graph_html, height=580)
 # and the rebuilt results_text reorders or shifts the graph context).
 results_hash = hashlib.sha1(results_text.encode("utf-8")).hexdigest()[:12]
 session_key = (
-    f"ai_summary_streamed:{pn}|{tk}|{ranking_mode}|{ppr_available}|{results_hash}"
+    f"ai_summary_streamed:{pn}|{tk}|{ranking_mode}|{undirected_graph}|{ppr_available}|{results_hash}"
 )
 
 with ai_placeholder.container():

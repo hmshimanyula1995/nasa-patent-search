@@ -195,6 +195,23 @@ def test_unknown_patent_shows_friendly_error_and_stops(fakes):
     assert at.metric == []
 
 
+def test_sidebar_has_undirected_graph_toggle_defaulting_off(fakes):
+    at = _run_landing()
+    toggles = at.sidebar.toggle
+    assert [t.label for t in toggles] == ["Undirected citation graph"]
+    assert toggles[0].value is False
+
+
+def test_undirected_toggle_changes_ranking_and_is_shown_in_results_header(fakes):
+    at = _run_search("US-1-A1")
+    assert "Undirected citation graph" not in _all_markdown(at)
+    at.sidebar.toggle[0].set_value(True)
+    at.run()
+    assert not at.exception, at.exception[0].value
+    assert "Undirected citation graph" in _all_markdown(at)
+    assert at.metric[4].label == "Citation Network"
+
+
 def test_app_uses_no_deprecated_streamlit_width_flag():
     assert "use_container_width" not in Path(APP).read_text()
 

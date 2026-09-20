@@ -77,6 +77,7 @@ def compute_ppr(
     G: nx.DiGraph,
     query_patent: str,
     alpha: float = 0.85,
+    undirected: bool = False,
 ) -> dict[str, float]:
     """Compute Personalized PageRank seeded from the query patent.
 
@@ -84,6 +85,9 @@ def compute_ppr(
         G: Citation graph.
         query_patent: Patent to seed teleport probability from.
         alpha: Damping factor (0.85 = 15% teleport back to query).
+        undirected: Rank on the undirected view of the graph, so importance
+            also flows along cited-by links. Useful when the query patent
+            cites nothing in the index. G itself is left directed.
 
     Returns:
         Dict mapping patent -> raw PPR score. Empty if graph has no edges.
@@ -95,15 +99,20 @@ def compute_ppr(
     if query_patent not in G:
         G.add_node(query_patent)
 
-    # With no outgoing edges from the seed, personalized PageRank keeps all
-    # mass on the query patent (score 1.0) and every other node receives only
+    ranked = G.to_undirected(as_view=True) if undirected else G
+
+    # With no edges leaving the seed, personalized PageRank keeps all mass on
+    # the query patent (score 1.0) and every other node receives only
     # floating-point residue. That is not a ranking signal, so report PPR as
     # unavailable and let the caller fall back to text similarity. Common on
-    # real data: a patent's citations often predate the indexed corpus.
-    if G.out_degree(query_patent) == 0:
+    # real data with the directed graph: a patent's citations often predate
+    # the indexed corpus. On the undirected graph only an isolated query hits
+    # this.
+    seed_degree = ranked.degree(query_patent) if undirected else G.out_degree(query_patent)
+    if seed_degree == 0:
         logger.info(
-            "PPR skipped: query patent %s has no outgoing citation edges in the index",
-            query_patent,
+            "PPR skipped: query patent %s has no %s citation edges in the index",
+            query_patent, "connected" if undirected else "outgoing",
         )
         return {}
 
@@ -112,7 +121,7 @@ def compute_ppr(
 
     try:
         scores = nx.pagerank(
-            G,
+            ranked,
             alpha=alpha,
             personalization=personalization,
             max_iter=100,
@@ -120,7 +129,8 @@ def compute_ppr(
         )
         top_3 = sorted(scores.items(), key=lambda x: -x[1])[:3]
         logger.info(
-            "PPR computed: %d scores, top 3: %s",
+            "PPR computed (%s graph): %d scores, top 3: %s",
+            "undirected" if undirected else "directed",
             len(scores),
             [(pub, f"{s:.6f}") for pub, s in top_3],
         )

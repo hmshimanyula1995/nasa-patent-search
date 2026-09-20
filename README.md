@@ -435,7 +435,7 @@ def compute_ppr(G, query_patent, alpha=0.85):
 
 `alpha=0.85` means at each step there's a 15% chance of teleporting back to the query patent. This ensures scores are anchored to the query rather than converging to generic hubs in the patent corpus.
 
-If the graph has no edges, if the query patent has no outgoing citation edges in the index (its citations predate the indexed corpus, which is common), or if PageRank fails to converge, the function returns an empty dict and the system falls back to cosine-only ranking.
+A sidebar toggle, "Undirected citation graph" (off by default), runs PageRank on the undirected view of the same graph so importance also flows along cited-by links; this gives a graph ranking to patents whose own citations are not in the index. If the graph has no edges, if the query patent has no outgoing citation edges in the index (its citations predate the indexed corpus, which is common; with the toggle on, only an isolated query hits this), or if PageRank fails to converge, the function returns an empty dict and the system falls back to cosine-only ranking.
 
 ---
 

@@ -70,6 +70,48 @@ def test_compute_ppr_returns_empty_when_query_has_no_outgoing_edges():
     assert gr.compute_ppr(G, "US-1-A1") == {}
 
 
+def _in_edges_only():
+    # Query cites nothing in the index but is cited by US-2, which cites US-3.
+    return pd.DataFrame(
+        {
+            "publication_number": ["US-1-A1", "US-2-A1", "US-3-A1"],
+            "citation": [_arr("US-99-A1"), _arr("US-1-A1"), _arr("US-2-A1")],
+            "cited_by": [None, None, None],
+            "parent": [None, None, None],
+            "child": [None, None, None],
+        }
+    )
+
+
+def test_compute_ppr_undirected_ranks_neighbors_when_query_has_no_outgoing_edges():
+    G = gr.build_citation_graph(_in_edges_only(), None, "US-1-A1")
+    scores = gr.compute_ppr(G, "US-1-A1", undirected=True)
+    assert set(scores) == {"US-1-A1", "US-2-A1", "US-3-A1"}
+    # Every node is reachable now; the neighbor adjacent to the seed outranks
+    # the one two hops away. (The seed itself need not rank first: US-2 is
+    # the hub of this chain and legitimately collects more mass.)
+    assert all(v > 0.01 for v in scores.values())
+    assert scores["US-2-A1"] > scores["US-3-A1"]
+    assert abs(sum(scores.values()) - 1.0) < 1e-6
+
+
+def test_compute_ppr_undirected_does_not_modify_the_directed_graph():
+    G = gr.build_citation_graph(_in_edges_only(), None, "US-1-A1")
+    gr.compute_ppr(G, "US-1-A1", undirected=True)
+    assert G.is_directed() and G.out_degree("US-1-A1") == 0
+
+
+def test_compute_ppr_undirected_returns_empty_for_isolated_query():
+    G = gr.nx.DiGraph()
+    G.add_edge("US-2-A1", "US-3-A1")
+    assert gr.compute_ppr(G, "US-1-A1", undirected=True) == {}
+
+
+def test_compute_ppr_defaults_to_directed(results):
+    G = gr.build_citation_graph(results, None, "US-1-A1")
+    assert gr.compute_ppr(G, "US-1-A1") == gr.compute_ppr(G, "US-1-A1", undirected=False)
+
+
 def test_compute_ppr_seeds_from_query_patent(results):
     G = gr.build_citation_graph(results, None, "US-1-A1")
     scores = gr.compute_ppr(G, "US-1-A1")
