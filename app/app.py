@@ -611,8 +611,13 @@ st.dataframe(
 
 # ── Structurally Important Patents (from citation expansion) ─────────────
 
+# Nodes the seed cannot reach carry floating-point residue from the power
+# iteration; anything that would display as 0.0% is not "structurally
+# important". Keep rows that show at least 0.1% after rounding.
+MIN_STRUCTURAL_PPR_PCT = 0.05
+
 if ppr_available and expanded_df is not None and not expanded_df.empty:
-    struct_df = expanded_df[expanded_df["ppr_pct"] > 0].copy()
+    struct_df = expanded_df[expanded_df["ppr_pct"] >= MIN_STRUCTURAL_PPR_PCT].copy()
     struct_df = struct_df.sort_values("ppr_pct", ascending=False).head(10)
 
     if not struct_df.empty:

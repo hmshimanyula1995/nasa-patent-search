@@ -177,6 +177,26 @@ def test_search_renders_full_results_page_from_bigquery_shaped_rows(fakes):
     assert [e.label for e in at.expander] == ["AI Analysis (Gemini)"]
 
 
+def test_structural_table_hides_rows_that_would_display_as_zero(fakes, monkeypatch):
+    # Nodes unreachable from the seed get floating-point residue from the
+    # power iteration. They must not appear as "structurally important" at 0.0%.
+    from utils import graph_ranking as gr
+    real = gr.compute_ppr
+
+    def residue(G, query, alpha=0.85, undirected=False):
+        scores = real(G, query, alpha, undirected)
+        for pub in ("US-10-A1", "US-11-A1"):
+            if pub in scores:
+                scores[pub] = 1e-9
+        return scores
+
+    monkeypatch.setattr(gr, "compute_ppr", residue)  # app.py re-imports it on every run
+    at = _run_search("US-1-A1")
+    assert not at.exception, at.exception[0].value
+    assert "Structurally Important Patents" not in _all_markdown(at)
+    assert len(at.dataframe) == 1
+
+
 def test_search_expands_citation_neighbors_through_bigquery(fakes):
     _run_search("US-1-A1")
     assert any("IN UNNEST(@neighbor_ids)" in s for s in fakes.sql)
