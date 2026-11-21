@@ -13,7 +13,7 @@
 # deploy workflow is how OS-level fixes reach production.
 
 # ---- build stage: install the pinned dependency set into a virtualenv -------
-FROM python:3.13-alpine3.24@sha256:7415fbc3c9e4979cc717d92377ab2bc7b2b4a2af1ac03cc52b5f3f88efedaf3a AS builder
+FROM python:3.15-alpine3.24@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -34,7 +34,7 @@ RUN python -m venv /opt/venv \
               /opt/venv/lib/python3.13/site-packages/pip-*.dist-info
 
 # ---- runtime stage: no pip, no compilers, unprivileged user -----------------
-FROM python:3.13-alpine3.24@sha256:7415fbc3c9e4979cc717d92377ab2bc7b2b4a2af1ac03cc52b5f3f88efedaf3a
+FROM python:3.15-alpine3.24@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 
 # Apply Alpine security updates published since the base was built. Then remove
 # pip and the wheel bundled for `python -m ensurepip`: nothing installs packages
